@@ -2,17 +2,16 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>🔽 多層級下拉整合頁</title>
+  <title>📋 多層級下拉選單最終版</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 30px; }
+    label { font-weight: bold; margin-right: 8px; }
     select {
       padding: 6px 12px;
       font-size: 16px;
-      margin-bottom: 12px;
-      margin-right: 12px;
+      margin: 8px 12px 16px 0;
     }
-    label { font-weight: bold; margin-right: 8px; }
     #logoutBtn {
       position: fixed;
       top: 10px;
@@ -22,12 +21,12 @@
       padding: 4px 8px;
       cursor: pointer;
     }
-    #loader { color: gray; margin: 12px 0; }
+    #loader { color: gray; margin-top: 10px; }
   </style>
 </head>
 <body>
 
-<h2>📋 多層下拉選單</h2>
+<h2>🔽 多層條件式下拉選單（修正附1~10）</h2>
 
 <!-- 顧客來源 -->
 <label for="sourceSelect">顧客來源：</label>
@@ -52,36 +51,38 @@
   <option>Ｕber Eats</option>
 </select>
 
-<!-- 附1 ~ 附10 -->
-<div id="extraGroup" style="margin: 16px 0;"></div>
-
-<!-- A 欄 -->
+<!-- 第一層 -->
+<br />
 <label for="selectA">第一層（A11~A106）：</label>
 <select id="selectA">
   <option value="">請等待載入...</option>
 </select>
 
-<!-- 第二層（B / C） -->
+<!-- 第二層 -->
 <div id="bcGroup">
   <label for="selectB1">第二層（B1）：</label>
   <select id="selectB1"><option value="">尚未選取</option></select>
   <select id="selectB2" style="display: none;"><option value="">尚未選取</option></select>
 </div>
 
-<div id="loader">🔐 載入資料中...</div>
+<!-- 附選單區 -->
+<div id="extraGroup"></div>
+<div id="loader">🔐 資料載入中...</div>
 <button id="logoutBtn">🔓 登出金鑰</button>
 
 <script>
 const TAG = "entry-token";
-const now = Date.now();
-const cached = JSON.parse(localStorage.getItem(TAG) || "null");
 let grid = [];
 
 (async () => {
+  const cached = JSON.parse(localStorage.getItem(TAG) || "null");
+  const now = Date.now();
   let token = cached && now < cached.expires ? cached.token : null;
+
   if (!token) {
-    token = prompt("請輸入 GitHub Token");
+    token = prompt("🔐 請輸入 GitHub Token");
     if (!token) return alert("❌ 沒有金鑰無法進入");
+
     localStorage.setItem(TAG, JSON.stringify({
       token: token.trim(),
       expires: now + 24 * 60 * 60 * 1000
@@ -90,7 +91,6 @@ let grid = [];
 
   const key = CryptoJS.enc.Utf8.parse(token.slice(0, 32).padEnd(32, '0'));
   const loader = document.getElementById("loader");
-  const selectA = document.getElementById("selectA");
 
   try {
     const res = await fetch("https://raw.githubusercontent.com/menghushao/Order-management-product/main/gridData.json");
@@ -98,39 +98,43 @@ let grid = [];
     const ivHex = CryptoJS.enc.Hex.parse(iv);
     const encrypted = CryptoJS.enc.Base64.parse(ciphertext);
     const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, {
-      iv: ivHex, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
+      iv: ivHex,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
     });
+
     const raw = decrypted.toString(CryptoJS.enc.Utf8);
     grid = JSON.parse(raw);
 
-    const aSet = new Set();
+    const selectA = document.getElementById("selectA");
+    const values = new Set();
     for (let r = 10; r <= 105; r++) {
       const val = grid[r]?.[0];
-      if (val?.trim()) aSet.add(val.trim());
+      if (val?.trim()) values.add(val.trim());
     }
 
     selectA.innerHTML = '<option value="">請選擇</option>';
-    [...aSet].forEach(v => {
+    [...values].forEach(v => {
       const opt = document.createElement("option");
       opt.value = opt.textContent = v;
       selectA.appendChild(opt);
     });
 
-    loader.textContent = "✅ 資料載入完成";
+    loader.textContent = `✅ 共載入 ${values.size} 筆 A 項目`;
   } catch (err) {
-    loader.textContent = "❌ 載入或解密失敗";
+    loader.textContent = "❌ 解密或載入失敗";
     console.error(err);
   }
 
-  // 顧客來源同步支付方式
+  // 顧客來源 → 自動對應支付方式
   document.getElementById("sourceSelect").addEventListener("change", e => {
-    const v = e.target.value.trim();
+    const val = e.target.value.trim();
     const payment = document.getElementById("paymentSelect");
-    const match = [...payment.options].find(o => o.value === v);
-    if (match) payment.value = v;
+    const match = [...payment.options].find(o => o.value === val);
+    if (match) payment.value = val;
   });
 })();
-  // 第一層 A → 第二層 B & C
+  // A → B/C 下拉邏輯
 document.getElementById("selectA").addEventListener("change", e => {
   const val = e.target.value.trim();
   const b1 = document.getElementById("selectB1");
@@ -148,6 +152,7 @@ document.getElementById("selectA").addEventListener("change", e => {
     if (m.row?.[2]?.trim()) cSet.add(m.row[2].trim());
   });
 
+  // B1
   b1.innerHTML = '<option value="">請選擇 B</option>';
   [...bSet].forEach(v => {
     const opt = document.createElement("option");
@@ -155,6 +160,7 @@ document.getElementById("selectA").addEventListener("change", e => {
     b1.appendChild(opt);
   });
 
+  // 若為雞蛋糕，顯示 B2
   if (val === "雞蛋糕") {
     b2.style.display = "inline-block";
     b2.innerHTML = '<option value="">請選擇 C</option>';
@@ -167,38 +173,51 @@ document.getElementById("selectA").addEventListener("change", e => {
     b2.style.display = "none";
   }
 
-  group.innerHTML = ""; // 清空附選單
+  // 清除附區塊
+  group.innerHTML = '';
 });
 
-// 第二層 B1 → 抓該列 F~O 做附1~附10
+// B1 → 對應附選單
 document.getElementById("selectB1").addEventListener("change", e => {
-  const val = e.target.value.trim();
+  const valA = document.getElementById("selectA").value.trim();
+  const valB = e.target.value.trim();
   const group = document.getElementById("extraGroup");
   group.innerHTML = "";
 
+  // 找出 grid 中 A+B 對應的那一列
   const rowObj = grid
     .map((row, r) => ({ row, r }))
-    .find(item => item.r >= 10 && item.r <= 105 && item.row?.[1]?.trim() === val);
+    .find(item =>
+      item.r >= 10 &&
+      item.r <= 105 &&
+      item.row?.[0]?.trim() === valA &&
+      item.row?.[1]?.trim() === valB
+    );
 
   if (!rowObj) return;
 
-  const extraVals = rowObj.row.slice(5, 15); // F~O = 第 5~14 欄
+  const extras = rowObj.row.slice(5, 15); // F~O = 附1~附10
 
-  extraVals.forEach((v, i) => {
+  extras.forEach((val, i) => {
     const label = document.createElement("label");
     label.textContent = `附${i + 1}：`;
 
     const sel = document.createElement("select");
-    sel.innerHTML = `<option value="">${v?.trim() || `附${i + 1}`}</option>`;
+    sel.innerHTML = `<option value="">附${i + 1}</option>`;
+    if (val?.trim()) {
+      const opt = document.createElement("option");
+      opt.value = opt.textContent = val.trim();
+      sel.appendChild(opt);
+    }
 
     group.appendChild(label);
     group.appendChild(sel);
   });
 });
 
-// 登出金鑰
+// 🔓 登出
 document.getElementById("logoutBtn").addEventListener("click", () => {
-  if (confirm("是否登出並清除金鑰？")) {
+  if (confirm("是否登出並重新登入？")) {
     localStorage.removeItem(TAG);
     location.reload();
   }
