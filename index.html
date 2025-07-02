@@ -170,7 +170,7 @@ function markInvalidAll() {
     });
     grid = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
     document.getElementById("loader").style.display = "none";
-    addCustomerCard();
+    addCustomerCard(); // 🎯 初始化第一筆資料
   } catch (err) {
     document.getElementById("loader").textContent = "❌ 載入失敗";
     console.error(err);
@@ -236,6 +236,7 @@ function updateOrderNumbers(wrap) {
   const timeLabel = document.createElement("span");
   const summary = document.createElement("div");
   summary.className = "summaryText";
+  summary.style.marginLeft = "auto";
 
   const left = document.createElement("div");
   left.className = "groupHeader";
@@ -262,12 +263,14 @@ function updateOrderNumbers(wrap) {
   markInvalid(orderNo);
 
   const payment = document.createElement("select");
-  payment.innerHTML = `
-    <option value="">支付方式</option>
-    <option>現金</option><option>信用卡</option>
-    <option>LINE Pay</option><option>Apple Pay</option>
-    <option>Ｕber Eats</option>
-  `;
+  payment.innerHTML = `<option value="">支付方式</option>`;
+  grid[6].slice(15, 32).forEach(v => {
+    if (v) {
+      const o = document.createElement("option");
+      o.value = o.textContent = v.trim();
+      payment.appendChild(o);
+    }
+  });
   markInvalid(payment);
 
   const pickupTime = document.createElement("input");
@@ -334,17 +337,18 @@ function updateOrderNumbers(wrap) {
   updateOrderNumbers(orderBox);
   updateCustomerNumbers();
 
+  // 🧠 更新摘要（包含雞蛋糕雙選、通路金額、時間顯示）
   function triggerSummaryUpdate() {
     const orders = [...orderBox.querySelectorAll(".orderCard")];
     const payMethod = payment.value.trim();
     const groups = [], countMap = {};
-    let totalCount = 0, totalAmount = 0;
+    let totalAmount = 0, totalCount = 0;
 
     const priority = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
 
     const deals = {};
     for (let i = 1; i <= 8; i++) {
-      const code = grid[i][0]?.trim();
+      const code = grid[i][0];
       if (!code) continue;
       deals[code] = {
         qty: parseInt(grid[i][1]),
@@ -354,43 +358,55 @@ function updateOrderNumbers(wrap) {
     }
 
     orders.forEach(order => {
-      const a = order.querySelector("select").value.trim();
-      const qty = parseInt(order.querySelector("input[type='number']").value || "1");
       const selects = order.querySelectorAll("select");
-      const b1 = selects[1].value.trim();
-      const b2 = selects[2].style.display !== "none" ? selects[2].value.trim() : "";
+      const a = selects[0]?.value.trim();
+      const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
+      const b1 = selects[1]?.value.trim();
+      const b2 = selects[2]?.style.display !== "none" ? selects[2]?.value.trim() : "";
       if (!a || !b1) return;
 
-      const parts = [b1, b2].filter(Boolean).sort();
+      const parts = [b1];
+      if (b2) parts.push(b2);
+      else parts.push(b1); // 雞蛋糕只選一顆時自動複製
+      parts.sort();
       const full = parts.join("+");
 
-      const row = grid.find(r => r[0] === a && r[1] === b1 && (!b2 || r[2] === b2));
-      if (!row) return;
+      const rows = parts.map(p =>
+        grid.find(r => r?.[0] === a && r?.[1] === p)
+      );
 
-      const short = row[2] || b1;
-      const dCode = row[3];
+      const shortNames = rows.map(r => r?.[2] || "").sort();
+      const short = shortNames.join("+");
+
       const payCol = grid[6].findIndex(v => v === payMethod);
-      const rawPrice = parseInt(row[payCol]) || 0;
-      const portion = a === "雞蛋糕" ? qty * 2 : qty;
+      const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
 
       let subtotal = 0;
-      if (dCode && deals[dCode] && deals[dCode].methods.includes(payMethod)) {
+      const dCode = rows.map(r => r?.[3]).find(Boolean);
+
+      if (a === "雞蛋糕") {
+        subtotal = prices.reduce((a, b) => a + b, 0) * qty;
+      } else if (dCode && deals[dCode] && deals[dCode].methods.includes(payMethod)) {
         const { qty: n, price: p } = deals[dCode];
         const x = Math.floor(qty / n);
         const r = qty % n;
-        subtotal = x * p + r * rawPrice;
+        subtotal = x * p + r * prices[0];
       } else {
-        subtotal = qty * rawPrice;
+        subtotal = qty * prices[0];
       }
 
-      const id = `${a}|${short}|${b2}`;
+      const id = `${a}|${short}`;
       const found = groups.find(g => g.id === id);
       if (found) {
         found.qty += qty;
-        found.total += portion;
+        found.total += a === "雞蛋糕" ? qty * 2 : qty;
         found.amount += subtotal;
       } else {
-        groups.push({ id, name: a, short, qty, total: portion, amount: subtotal });
+        groups.push({
+          id, name: a, short, qty,
+          total: a === "雞蛋糕" ? qty * 2 : qty,
+          amount: subtotal
+        });
       }
 
       countMap[a] = (countMap[a] || 0) + qty;
@@ -402,13 +418,27 @@ function updateOrderNumbers(wrap) {
 
     const line1 = Object.entries(priority)
       .filter(([key]) => countMap[key])
-      .map(([key]) => `${key}共${countMap[key]}份`)
+      .map(([key]) => `${key}${countMap[key]}份`)
       .join("；") + `，共 ${totalCount} 份`;
 
-    const line2 = `共 ${totalAmount} 元`;
+    const line2Parts = [`共 ${totalAmount} 元`];
+    if (delivery.value.trim()) line2Parts.push(`送達時間 ${formatTime(pickupTime.value)}`);
+    else if (pickupTime.value) line2Parts.push(`取餐時間 ${formatTime(pickupTime.value)}`);
+
     const line3 = groups.map(g => `${g.short}X${g.qty}`).join("；");
 
-    summary.textContent = `${line1}\n${line2}\n${line3}`;
+    summary.textContent = `${line1}\n${line2Parts.join("； ")}\n${line3}`;
+  }
+
+  function formatTime(str) {
+    const dt = new Date(str);
+    if (isNaN(dt)) return "";
+    const y = dt.getFullYear();
+    const m = dt.getMonth() + 1;
+    const d = dt.getDate();
+    const h = dt.getHours();
+    const mi = dt.getMinutes();
+    return `${y}/${m}/${d}/${h}:${mi.toString().padStart(2, "0")}`;
   }
 }
   function addOrderBlock(wrapper) {
