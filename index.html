@@ -2,89 +2,97 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統</title>
+  <title>📦 訂單管理系統</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 24px; }
-    select, input[type="text"], input[type="datetime-local"] {
-      padding: 6px 12px;
+    * { box-sizing: border-box; }
+    body { font-family: sans-serif; padding: 20px; margin: 0; }
+
+    .invalid { background-color: #ffe4e1 !important; }
+
+    select, input[type="text"], input[type="number"], input[type="datetime-local"] {
       font-size: 14px;
-      margin: 8px 8px 10px 0;
-    }
-    select.invalid, input.invalid {
-      background-color: #ffe4e1 !important;
+      padding: 6px 10px;
+      margin: 4px 6px 10px 0;
     }
 
     .btn {
+      padding: 6px 12px;
+      margin-right: 8px;
       cursor: pointer;
-      font-size: 13px;
-      padding: 4px 8px;
-      margin: 2px;
-      border: 1px solid #aaa;
+      border: 1px solid #bbb;
+      background: #f2f2f2;
+      font-size: 14px;
     }
-    .btn.add { background: #e3f2fd; }
-    .btn.del { background: #ffe4e1; }
+
+    .btn.add { background: #e1f5fe; border-color: #81d4fa; }
+    .btn.del { background: #ffcdd2; border-color: #e57373; }
+
+    .stickyBar {
+      position: sticky;
+      top: 0;
+      background: white;
+      padding: 10px 0;
+      z-index: 100;
+      border-bottom: 1px solid #ccc;
+    }
 
     .groupCard {
-      border: 2px dashed #ccc;
-      padding: 16px;
+      border: 2px dashed #aaa;
+      padding: 12px;
       margin-bottom: 24px;
     }
+
     .groupHeader {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 8px;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
     }
-    .groupHeader h3 { margin: 0; }
 
     .orderContainer {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      overflow-x: auto;
       gap: 16px;
-      align-items: flex-start;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
     }
+
     .orderCard {
+      flex: 0 0 auto;
+      width: 320px;
       border: 1px solid #999;
-      padding: 12px;
-      width: 300px;
-      background: #f9f9f9;
-      overflow: hidden;
-      word-wrap: break-word;
+      padding: 10px;
+      background: #fcfcfc;
     }
+
     .orderTitle {
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-weight: bold;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
-    .orderSelects {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-bottom: 10px;
+    .orderFields > div {
+      margin-bottom: 6px;
     }
 
     .extraGrid {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
       gap: 6px;
-      max-width: 100%;
     }
 
-    .extraGrid select {
-      min-width: 110px;
-      max-width: 120px;
-    }
-
-    .rowLine {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 8px;
+    .summaryText {
+      margin-top: 8px;
+      background: #f5f5f5;
+      padding: 6px 10px;
+      font-size: 13px;
+      white-space: pre-line;
+      border-left: 4px solid #ccc;
     }
 
     #logoutBtn {
@@ -92,16 +100,20 @@
       top: 10px;
       right: 10px;
       background: #eee;
-      border: 1px solid #ccc;
-      padding: 4px 10px;
+      border: 1px solid #aaa;
+      padding: 4px 8px;
+      font-size: 13px;
       cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-<h2>📋 多客人訂單系統</h2>
-<button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
+<div class="stickyBar">
+  <h2>📋 多客人訂單系統</h2>
+  <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
+</div>
+
 <div id="container"></div>
 <div id="loader">🔐 資料載入中...</div>
 <button id="logoutBtn">🔓 登出金鑰</button>
@@ -109,21 +121,14 @@
 <script>
 const TAG = "entry-token";
 let grid = [], customerCount = 0;
-
-// 離開提示
-window.addEventListener("beforeunload", e => {
-  e.preventDefault();
-  e.returnValue = "";
-});
   function markInvalid(el) {
   const isSelect = el.tagName === "SELECT";
   const empty = isSelect ? el.value === "" : !el.value.trim();
-  if (empty) el.classList.add("invalid");
-  else el.classList.remove("invalid");
+  el.classList.toggle("invalid", empty);
 }
 
 function markInvalidAll() {
-  document.querySelectorAll("select, input[type='text'], input[type='datetime-local']").forEach(markInvalid);
+  document.querySelectorAll("select, input[type='text'], input[type='number'], input[type='datetime-local']").forEach(markInvalid);
 }
 
 (async () => {
@@ -147,9 +152,7 @@ function markInvalidAll() {
     const ivHex = CryptoJS.enc.Hex.parse(iv);
     const encrypted = CryptoJS.enc.Base64.parse(ciphertext);
     const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, {
-      iv: ivHex,
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7
+      iv: ivHex, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
     });
     grid = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
     document.getElementById("loader").style.display = "none";
@@ -164,8 +167,22 @@ document.getElementById("addCustomerBtn").addEventListener("click", () => {
   addCustomerCard();
 });
 
-// 🔧 建立客人卡
-function addCustomerCard() {
+// 自動更新客人編號
+function updateCustomerNumbers() {
+  document.querySelectorAll(".groupCard").forEach((g, i) => {
+    const h3 = g.querySelector("h3");
+    if (h3) h3.textContent = `第 ${i + 1} 組客人`;
+  });
+}
+
+// 自動更新訂單編號
+function updateOrderNumbers(wrap) {
+  wrap.querySelectorAll(".orderCard").forEach((el, i) => {
+    const label = el.querySelector(".orderTitle span");
+    if (label) label.textContent = `第 ${i + 1} 組訂單`;
+  });
+}
+  function addCustomerCard() {
   const container = document.getElementById("container");
   const card = document.createElement("div");
   card.className = "groupCard";
@@ -186,22 +203,28 @@ function addCustomerCard() {
   const title = document.createElement("h3");
   const state = document.createElement("select");
   state.innerHTML = `
+    <option value="">訂單狀態</option>
     <option>已出貨</option>
     <option>已結待製</option>
-    <option selected>未結待製</option>
+    <option>未結待製</option>
     <option>已結待取</option>
     <option>未結待取</option>
   `;
+  markInvalid(state);
 
-  const time = document.createElement("span");
+  const timeLabel = document.createElement("span");
+  const summary = document.createElement("div");
+  summary.className = "summaryText";
 
   const left = document.createElement("div");
   left.className = "groupHeader";
   left.append(del, title);
 
-  header.append(left, state, time);
+  header.append(left, state, timeLabel);
   card.appendChild(header);
-    const row = document.createElement("div");
+  card.appendChild(summary);
+
+  const row = document.createElement("div");
   row.className = "rowLine";
 
   const source = document.createElement("select");
@@ -243,22 +266,24 @@ function addCustomerCard() {
     const val = source.value.trim();
     orderNo.style.display = val === "Ｕber Eats" ? "inline-block" : "none";
 
-    // 自動套用支付方式
     const match = [...payment.options].find(o => o.value === val);
     if (match) payment.value = val;
 
-    // 顯示時間
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, "0");
     const mm = String(now.getMinutes()).padStart(2, "0");
     const ss = String(now.getSeconds()).padStart(2, "0");
-    header.lastElementChild.textContent = `${hh}:${mm}:${ss}`;
+    timeLabel.textContent = `${hh}:${mm}:${ss}`;
 
     markInvalidAll();
+    updateSummary(); // 每次改來源也刷新摘要
   });
 
   [source, orderNo, payment, delivery, points, adjust].forEach(el =>
-    el.addEventListener("change", markInvalidAll)
+    el.addEventListener("change", () => {
+      markInvalidAll();
+      updateSummary();
+    })
   );
 
   row.append(source, orderNo, payment, delivery, points, adjust, boxChk);
@@ -274,12 +299,18 @@ function addCustomerCard() {
   addOrderBtn.onclick = () => {
     addOrderBlock(orderBox);
     updateOrderNumbers(orderBox);
+    updateSummary();
   };
   card.appendChild(addOrderBtn);
 
   document.getElementById("container").appendChild(card);
   addOrderBlock(orderBox);
   updateCustomerNumbers();
+
+  // 摘要邏輯會在第 4 段補上
+  function updateSummary() {
+    // 這個邏輯會在下一段撰寫
+  }
 }
   function addOrderBlock(wrapper) {
   const card = document.createElement("div");
@@ -288,7 +319,7 @@ function addCustomerCard() {
   const title = document.createElement("div");
   title.className = "orderTitle";
   const label = document.createElement("span");
-  label.textContent = "第 X 組訂單"; // 初始化，稍後會更新正確編號
+  label.textContent = "第 X 組訂單";
   const del = document.createElement("button");
   del.textContent = "❌";
   del.className = "btn del";
@@ -296,20 +327,35 @@ function addCustomerCard() {
     if (confirm("刪除此訂單？")) {
       card.remove();
       updateOrderNumbers(wrapper);
+      triggerSummaryUpdate();
     }
   };
   title.append(label, del);
   card.appendChild(title);
 
+  // --- A 選單 + 份數欄位 ---
   const a = document.createElement("select");
   a.innerHTML = `<option value="">請選擇 A</option>`;
   new Set(grid.slice(10,106).map(r=>r?.[0]).filter(Boolean)).forEach(v => {
     const o = document.createElement("option");
-    o.value = o.textContent = v;
+    o.textContent = o.value = v;
     a.appendChild(o);
   });
   markInvalid(a);
 
+  const qty = document.createElement("input");
+  qty.type = "number";
+  qty.min = "1";
+  qty.value = "1";
+  qty.style.width = "60px";
+  markInvalid(qty);
+
+  const rowTop = document.createElement("div");
+  rowTop.className = "rowLine";
+  rowTop.append(a, qty);
+  card.appendChild(rowTop);
+
+  // --- B1, B2 選單 ---
   const b1 = document.createElement("select");
   b1.innerHTML = `<option value="">請選擇 B</option>`;
   markInvalid(b1);
@@ -319,24 +365,15 @@ function addCustomerCard() {
   b2.style.display = "none";
   markInvalid(b2);
 
-  const rowA = document.createElement("div");
-  rowA.className = "orderSelects";
+  const rowMid = document.createElement("div");
+  rowMid.className = "rowLine";
+  rowMid.append(b1, b2);
+  card.appendChild(rowMid);
 
-  const firstRow = document.createElement("div");
-  firstRow.className = "rowLine";
-  firstRow.appendChild(a);
-
-  const secondRow = document.createElement("div");
-  secondRow.className = "rowLine";
-  secondRow.append(b1, b2);
-
-  const thirdRow = document.createElement("div");
-  thirdRow.className = "extraGrid";
-
-  rowA.append(firstRow, secondRow, thirdRow);
-  card.appendChild(rowA);
-
-  a.addEventListener("change", () => {
+  // --- 附1～10 ---
+  const rowExtras = document.createElement("div");
+  rowExtras.className = "extraGrid";
+  card.appendChild(rowExtras);  a.addEventListener("change", () => {
     const val = a.value.trim();
     const matched = grid.filter(r => r?.[0]?.trim() === val);
     const bSet = new Set(matched.map(r => r?.[1]).filter(Boolean));
@@ -345,7 +382,7 @@ function addCustomerCard() {
     b1.innerHTML = `<option value="">請選擇 B</option>`;
     [...bSet].forEach(v => {
       const o = document.createElement("option");
-      o.value = o.textContent = v;
+      o.textContent = o.value = v;
       b1.appendChild(o);
     });
 
@@ -354,15 +391,16 @@ function addCustomerCard() {
       b2.innerHTML = `<option value="">請選擇 C</option>`;
       [...cSet].forEach(v => {
         const o = document.createElement("option");
-        o.value = o.textContent = v;
+        o.textContent = o.value = v;
         b2.appendChild(o);
       });
     } else {
       b2.style.display = "none";
     }
 
-    thirdRow.innerHTML = "";
+    rowExtras.innerHTML = "";
     markInvalidAll();
+    triggerSummaryUpdate();
   });
 
   b1.addEventListener("change", () => {
@@ -372,8 +410,7 @@ function addCustomerCard() {
     if (!row) return;
 
     const opts = row.slice(5,15).map(v => v?.trim()).filter(Boolean);
-    thirdRow.innerHTML = "";
-
+    rowExtras.innerHTML = "";
     for (let i = 1; i <= 10; i++) {
       const sel = document.createElement("select");
       sel.innerHTML = `<option value="">附${i}</option>`;
@@ -382,36 +419,28 @@ function addCustomerCard() {
         o.textContent = o.value = v;
         sel.appendChild(o);
       });
-      sel.addEventListener("change", markInvalidAll);
-      markInvalid(sel);
-      thirdRow.appendChild(sel);
+      sel.addEventListener("change", () => {
+        markInvalidAll();
+        triggerSummaryUpdate();
+      });
+      rowExtras.appendChild(sel);
     }
 
     markInvalidAll();
+    triggerSummaryUpdate();
   });
 
-  [a, b1, b2].forEach(sel => sel.addEventListener("change", markInvalidAll));
+  [a, b1, b2, qty].forEach(el => el.addEventListener("change", () => {
+    markInvalidAll();
+    triggerSummaryUpdate();
+  }));
+
   wrapper.appendChild(card);
   updateOrderNumbers(wrapper);
+  triggerSummaryUpdate();
 }
 
-// 🧠 更新「客人」的編號
-function updateCustomerNumbers() {
-  document.querySelectorAll(".groupCard").forEach((g, i) => {
-    const h3 = g.querySelector("h3");
-    if (h3) h3.textContent = `第 ${i + 1} 組客人`;
-  });
-}
-
-// 🧠 更新該「客人內部」訂單順序
-function updateOrderNumbers(wrap) {
-  wrap.querySelectorAll(".orderCard").forEach((el, i) => {
-    const label = el.querySelector(".orderTitle span");
-    if (label) label.textContent = `第 ${i + 1} 組訂單`;
-  });
-}
-
-// 🔓 登出邏輯
+// 🔓 登出按鈕
 document.getElementById("logoutBtn").addEventListener("click", () => {
   if (confirm("是否登出？")) {
     localStorage.removeItem(TAG);
@@ -421,4 +450,3 @@ document.getElementById("logoutBtn").addEventListener("click", () => {
 </script>
 </body>
 </html>
-  
