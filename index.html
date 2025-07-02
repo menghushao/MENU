@@ -2,15 +2,21 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📋 多層級下拉選單最終版</title>
+  <title>📋 多層條件式下拉選單（附選修正）</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 30px; }
     label { font-weight: bold; margin-right: 8px; }
-    select {
+    select, input[type="text"] {
       padding: 6px 12px;
       font-size: 16px;
       margin: 8px 12px 16px 0;
+    }
+    select.invalid {
+      background-color: #ffe4e1 !important; /* 淺粉紅 */
+    }
+    #orderNumber {
+      display: none;
     }
     #logoutBtn {
       position: fixed;
@@ -26,7 +32,7 @@
 </head>
 <body>
 
-<h2>🔽 多層條件式下拉選單（修正附1~10）</h2>
+<h2>🔽 多層條件式下拉選單（修正版）</h2>
 
 <!-- 顧客來源 -->
 <label for="sourceSelect">顧客來源：</label>
@@ -40,6 +46,9 @@
   <option>簡訊</option>
   <option>Ｕber Eats</option>
 </select>
+
+<!-- 單號輸入欄 -->
+<input type="text" id="orderNumber" placeholder="填入單號" />
 
 <!-- 支付方式 -->
 <select id="paymentSelect">
@@ -74,6 +83,32 @@
 const TAG = "entry-token";
 let grid = [];
 
+const markInvalidSelects = () => {
+  document.querySelectorAll("select").forEach(sel => {
+    if (sel.value === "") {
+      sel.classList.add("invalid");
+    } else {
+      sel.classList.remove("invalid");
+    }
+  });
+};
+
+// 顧客來源切換 → 顯示單號欄位（若選 Uber Eats）
+document.getElementById("sourceSelect").addEventListener("change", e => {
+  const val = e.target.value.trim();
+  const payment = document.getElementById("paymentSelect");
+  const orderInput = document.getElementById("orderNumber");
+  const match = [...payment.options].find(o => o.value === val);
+  if (match) payment.value = val;
+  orderInput.style.display = (val === "Ｕber Eats") ? "inline-block" : "none";
+  markInvalidSelects();
+});
+
+document.getElementById("paymentSelect").addEventListener("change", markInvalidSelects);
+document.getElementById("selectA").addEventListener("change", markInvalidSelects);
+document.getElementById("selectB1").addEventListener("change", markInvalidSelects);
+document.getElementById("selectB2").addEventListener("change", markInvalidSelects);
+
 (async () => {
   const cached = JSON.parse(localStorage.getItem(TAG) || "null");
   const now = Date.now();
@@ -98,9 +133,7 @@ let grid = [];
     const ivHex = CryptoJS.enc.Hex.parse(iv);
     const encrypted = CryptoJS.enc.Base64.parse(ciphertext);
     const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, {
-      iv: ivHex,
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7
+      iv: ivHex, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
     });
 
     const raw = decrypted.toString(CryptoJS.enc.Utf8);
@@ -120,19 +153,12 @@ let grid = [];
       selectA.appendChild(opt);
     });
 
-    loader.textContent = `✅ 共載入 ${values.size} 筆 A 項目`;
+    loader.textContent = `✅ 載入 A 選項 ${values.size} 筆`;
+    markInvalidSelects();
   } catch (err) {
-    loader.textContent = "❌ 解密或載入失敗";
+    loader.textContent = "❌ 載入或解密失敗";
     console.error(err);
   }
-
-  // 顧客來源 → 自動對應支付方式
-  document.getElementById("sourceSelect").addEventListener("change", e => {
-    const val = e.target.value.trim();
-    const payment = document.getElementById("paymentSelect");
-    const match = [...payment.options].find(o => o.value === val);
-    if (match) payment.value = val;
-  });
 })();
   // A → B/C 下拉邏輯
 document.getElementById("selectA").addEventListener("change", e => {
@@ -152,7 +178,6 @@ document.getElementById("selectA").addEventListener("change", e => {
     if (m.row?.[2]?.trim()) cSet.add(m.row[2].trim());
   });
 
-  // B1
   b1.innerHTML = '<option value="">請選擇 B</option>';
   [...bSet].forEach(v => {
     const opt = document.createElement("option");
@@ -160,7 +185,6 @@ document.getElementById("selectA").addEventListener("change", e => {
     b1.appendChild(opt);
   });
 
-  // 若為雞蛋糕，顯示 B2
   if (val === "雞蛋糕") {
     b2.style.display = "inline-block";
     b2.innerHTML = '<option value="">請選擇 C</option>';
@@ -173,19 +197,18 @@ document.getElementById("selectA").addEventListener("change", e => {
     b2.style.display = "none";
   }
 
-  // 清除附區塊
   group.innerHTML = '';
+  markInvalidSelects();
 });
 
-// B1 → 對應附選單
+// B1 → 附1~10：全選單共用同一組 F~G 選項
 document.getElementById("selectB1").addEventListener("change", e => {
   const valA = document.getElementById("selectA").value.trim();
   const valB = e.target.value.trim();
   const group = document.getElementById("extraGroup");
   group.innerHTML = "";
 
-  // 找出 grid 中 A+B 對應的那一列
-  const rowObj = grid
+  const targetRow = grid
     .map((row, r) => ({ row, r }))
     .find(item =>
       item.r >= 10 &&
@@ -194,35 +217,42 @@ document.getElementById("selectB1").addEventListener("change", e => {
       item.row?.[1]?.trim() === valB
     );
 
-  if (!rowObj) return;
+  if (!targetRow) return;
 
-  const extras = rowObj.row.slice(5, 15); // F~O = 附1~附10
+  const f = targetRow.row[5];
+  const g = targetRow.row[6];
+  const options = [f, g].filter(Boolean).map(v => v.trim()).filter(v => v);
 
-  extras.forEach((val, i) => {
+  for (let i = 1; i <= 10; i++) {
     const label = document.createElement("label");
-    label.textContent = `附${i + 1}：`;
+    label.textContent = `附${i}：`;
 
     const sel = document.createElement("select");
-    sel.innerHTML = `<option value="">附${i + 1}</option>`;
-    if (val?.trim()) {
+    sel.innerHTML = `<option value="">附${i}</option>`;
+    options.forEach(optVal => {
       const opt = document.createElement("option");
-      opt.value = opt.textContent = val.trim();
+      opt.value = opt.textContent = optVal;
       sel.appendChild(opt);
-    }
+    });
 
+    sel.addEventListener("change", markInvalidSelects);
     group.appendChild(label);
     group.appendChild(sel);
-  });
+  }
+
+  markInvalidSelects();
 });
 
-// 🔓 登出
+// 雞蛋糕 B2 選變時也觸發底色更新
+document.getElementById("selectB2").addEventListener("change", markInvalidSelects);
+
+// 登出
 document.getElementById("logoutBtn").addEventListener("click", () => {
-  if (confirm("是否登出並重新登入？")) {
+  if (confirm("是否登出並清除金鑰？")) {
     localStorage.removeItem(TAG);
     location.reload();
   }
 });
 </script>
-
 </body>
 </html>
