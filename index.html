@@ -2,18 +2,34 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📋 全功能下拉選單頁</title>
+  <title>🧩 多訂單管理頁</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 30px; }
-    label { font-weight: bold; margin-right: 8px; }
     select, input[type="text"], input[type="datetime-local"] {
       padding: 6px 12px;
       font-size: 16px;
       margin: 8px 12px 12px 0;
     }
     select.invalid { background-color: #ffe4e1 !important; }
-    #orderNumber { display: none; }
+    .orderCard {
+      border: 2px dashed #ccc;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .orderTitle {
+      font-weight: bold;
+      font-size: 18px;
+      margin-bottom: 12px;
+      color: #444;
+    }
+    .rowFlex {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
     #logoutBtn {
       position: fixed;
       top: 10px;
@@ -23,105 +39,46 @@
       padding: 4px 8px;
       cursor: pointer;
     }
-    #formRow { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
-    #extraGroup { margin-top: 20px; }
-    .inputGroup { display: flex; align-items: center; margin-right: 16px; }
+    #addCustomerBtn {
+      padding: 6px 12px;
+      font-size: 16px;
+      margin-bottom: 20px;
+      background: #daf1e3;
+      border: 1px solid #8fbc8f;
+      cursor: pointer;
+    }
+    .extraGroup {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .extraGroup select {
+      min-width: 100px;
+    }
+    .lineGroup { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
   </style>
 </head>
 <body>
 
-<h2>🔽 全功能下拉選單整合</h2>
+<h2>📋 多組客人訂單管理</h2>
+<button id="addCustomerBtn">➕ 新增客人</button>
 
-<div id="formRow">
-  <!-- 顧客來源 -->
-  <label for="sourceSelect">顧客來源：</label>
-  <select id="sourceSelect">
-    <option value="">顧客來源</option>
-    <option>到店</option>
-    <option>電話</option>
-    <option>LINE</option>
-    <option>FB</option>
-    <option>IG</option>
-    <option>簡訊</option>
-    <option>Ｕber Eats</option>
-  </select>
-
-  <!-- 單號欄 -->
-  <input type="text" id="orderNumber" placeholder="填入單號" />
-
-  <!-- 支付方式 -->
-  <select id="paymentSelect">
-    <option value="">支付方式</option>
-    <option>現金</option>
-    <option>信用卡</option>
-    <option>LINE Pay</option>
-    <option>Apple Pay</option>
-    <option>Ｕber Eats</option>
-  </select>
-
-  <!-- 取餐時間 -->
-  <label for="pickupTime">取餐時間：</label>
-  <input type="datetime-local" id="pickupTime" />
-
-  <!-- 外送勾勾 -->
-  <label><input type="checkbox" id="deliveryChk" /> 外送</label>
-
-  <!-- 集點卡 -->
-  <label for="pointsSelect">集點卡兌換：</label>
-  <select id="pointsSelect">
-    <option value="">集點卡兌換</option>
-    ${[...Array(10)].map((_, i) => `<option>${i + 1}</option>`).join("")}
-  </select>
-  <input type="text" id="pointsInput" placeholder="自訂兌換值" style="width: 60px;" />
-
-  <!-- 自備容器 -->
-  <label><input type="checkbox" id="boxChk" /> 雞蛋糕自備容器</label>
-
-  <!-- 金額調整 -->
-  <input type="text" id="adjustment" placeholder="金額調整" />
-</div>
-
-<!-- A → B1/B2 區 -->
-<div style="display: flex; align-items: center; gap: 16px; margin-bottom: 12px;">
-  <label for="selectA">第一層：</label>
-  <select id="selectA"><option value="">請等待載入...</option></select>
-
-  <div id="bcGroup">
-    <label for="selectB1">第二層（B1）：</label>
-    <select id="selectB1"><option value="">尚未選取</option></select>
-    <select id="selectB2" style="display: none;"><option value="">尚未選取</option></select>
-  </div>
-</div>
-
-<!-- 附選單 -->
-<div id="extraGroup"></div>
-<div id="loader">🔐 載入資料中...</div>
+<div id="customerContainer"></div>
+<div id="loader">🔐 資料載入中...</div>
 <button id="logoutBtn">🔓 登出金鑰</button>
 
 <script>
 const TAG = "entry-token";
-let grid = [];
+let grid = [], customerCount = 0;
 
-const markInvalidSelects = () => {
-  document.querySelectorAll("select").forEach(sel => {
+const markInvalidSelects = (wrap) => {
+  wrap.querySelectorAll("select").forEach(sel => {
     sel.classList.toggle("invalid", sel.value === "");
   });
 };
 
-// 顧客來源變更事件
-document.getElementById("sourceSelect").addEventListener("change", e => {
-  const val = e.target.value.trim();
-  const payment = document.getElementById("paymentSelect");
-  const orderInput = document.getElementById("orderNumber");
-  if ([...payment.options].find(o => o.value === val)) payment.value = val;
-  orderInput.style.display = val === "Ｕber Eats" ? "inline-block" : "none";
-  markInvalidSelects();
-});
-
-["paymentSelect","selectA","selectB1","selectB2","pointsSelect"].forEach(id =>
-  document.getElementById(id).addEventListener("change", markInvalidSelects)
-);
-
+// 初始化資料載入
 (async () => {
   const cached = JSON.parse(localStorage.getItem(TAG) || "null");
   const now = Date.now();
@@ -130,6 +87,7 @@ document.getElementById("sourceSelect").addEventListener("change", e => {
   if (!token) {
     token = prompt("🔐 請輸入 GitHub Token");
     if (!token) return alert("❌ 無法繼續");
+
     localStorage.setItem(TAG, JSON.stringify({
       token: token.trim(),
       expires: now + 24 * 60 * 60 * 1000
@@ -137,8 +95,6 @@ document.getElementById("sourceSelect").addEventListener("change", e => {
   }
 
   const key = CryptoJS.enc.Utf8.parse(token.slice(0, 32).padEnd(32, '0'));
-  const loader = document.getElementById("loader");
-
   try {
     const res = await fetch("https://raw.githubusercontent.com/menghushao/Order-management-product/main/gridData.json");
     const { ciphertext, iv } = await res.json();
@@ -147,120 +103,139 @@ document.getElementById("sourceSelect").addEventListener("change", e => {
     const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, {
       iv: ivHex, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
     });
-
-    const raw = decrypted.toString(CryptoJS.enc.Utf8);
-    grid = JSON.parse(raw);
-
-    const selectA = document.getElementById("selectA");
-    const values = new Set();
-    for (let r = 10; r <= 105; r++) {
-      const val = grid[r]?.[0];
-      if (val?.trim()) values.add(val.trim());
-    }
-
-    selectA.innerHTML = '<option value="">請選擇</option>';
-    [...values].forEach(v => {
-      const opt = document.createElement("option");
-      opt.value = opt.textContent = v;
-      selectA.appendChild(opt);
-    });
-
-    loader.textContent = `✅ A 欄已載入 ${values.size} 項`;
-    markInvalidSelects();
+    grid = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
+    document.getElementById("loader").style.display = "none";
+    addCustomerBlock(); // 初始第一組客人
   } catch (err) {
-    loader.textContent = "❌ 載入或解密失敗";
+    document.getElementById("loader").textContent = "❌ 資料載入失敗";
     console.error(err);
   }
 })();
-  // A → B1/B2 下拉邏輯
-document.getElementById("selectA").addEventListener("change", e => {
-  const val = e.target.value.trim();
-  const b1 = document.getElementById("selectB1");
-  const b2 = document.getElementById("selectB2");
-  const group = document.getElementById("extraGroup");
+  function addCustomerBlock() {
+  customerCount++;
+  const container = document.getElementById("customerContainer");
 
-  const matched = grid
-    .map((row, r) => ({ row, r }))
-    .filter(item => item.r >= 10 && item.r <= 105 && item.row?.[0]?.trim() === val);
+  const card = document.createElement("div");
+  card.className = "orderCard";
 
-  const bSet = new Set();
-  const cSet = new Set();
-  matched.forEach(m => {
-    if (m.row?.[1]?.trim()) bSet.add(m.row[1].trim());
-    if (m.row?.[2]?.trim()) cSet.add(m.row[2].trim());
+  const title = document.createElement("div");
+  title.className = "orderTitle";
+  title.textContent = `第 ${customerCount} 組客人`;
+  card.appendChild(title);
+
+  const form = document.createElement("div");
+  form.className = "lineGroup";
+  form.innerHTML = `
+    <label>顧客來源：</label>
+    <select><option value="">顧客來源</option><option>到店</option><option>電話</option><option>LINE</option><option>FB</option><option>IG</option><option>簡訊</option><option>Ｕber Eats</option></select>
+    <input type="text" placeholder="填入單號" style="display:none"/>
+    <select><option value="">支付方式</option><option>現金</option><option>信用卡</option><option>LINE Pay</option><option>Apple Pay</option><option>Ｕber Eats</option></select>
+    <label>取餐時間：</label><input type="datetime-local"/>
+    <label><input type="checkbox"/> 外送</label>
+    <label>集點卡兌換：</label>
+    <select><option value="">集點卡兌換</option>${[...Array(10)].map((_,i)=>`<option>${i+1}</option>`).join("")}</select>
+    <input type="text" placeholder="自訂兌換" style="width:60px"/>
+    <label><input type="checkbox"/> 雞蛋糕自備容器</label>
+    <input type="text" placeholder="金額調整"/>
+  `;
+  card.appendChild(form);
+
+  const rowFlex = document.createElement("div");
+  rowFlex.className = "lineGroup";
+
+  // 第一層 A
+  const selectA = document.createElement("select");
+  selectA.innerHTML = '<option value="">請選擇 A</option>';
+  new Set(grid.slice(10,106).map(r=>r?.[0]).filter(Boolean)).forEach(v=>{
+    const o = document.createElement("option");
+    o.textContent = o.value = v;
+    selectA.appendChild(o);
   });
 
-  b1.innerHTML = '<option value="">請選擇 B</option>';
-  [...bSet].forEach(v => {
-    const opt = document.createElement("option");
-    opt.value = opt.textContent = v;
-    b1.appendChild(opt);
+  // 第二層 B1 + B2
+  const selectB1 = document.createElement("select");
+  selectB1.innerHTML = '<option value="">請選擇 B</option>';
+  const selectB2 = document.createElement("select");
+  selectB2.style.display = "none";
+
+  rowFlex.innerHTML = '<label>第一層：</label>';
+  rowFlex.appendChild(selectA);
+  rowFlex.innerHTML += '<label>第二層（B）：</label>';
+  rowFlex.appendChild(selectB1);
+  rowFlex.appendChild(selectB2);
+
+  const extras = document.createElement("div");
+  extras.className = "extraGroup";
+
+  card.appendChild(rowFlex);
+  card.appendChild(extras);
+  container.appendChild(card);
+
+  // 事件 🎯
+  selectA.addEventListener("change", () => {
+    const aVal = selectA.value.trim();
+    const matched = grid.filter(r=>r?.[0]?.trim() === aVal);
+    const bSet = new Set(matched.map(r=>r?.[1]).filter(Boolean));
+    const cSet = new Set(matched.map(r=>r?.[2]).filter(Boolean));
+
+    selectB1.innerHTML = '<option value="">請選擇 B</option>';
+    [...bSet].forEach(v=>{
+      const o = document.createElement("option");
+      o.value = o.textContent = v;
+      selectB1.appendChild(o);
+    });
+
+    if (aVal === "雞蛋糕") {
+      selectB2.style.display = "inline-block";
+      selectB2.innerHTML = '<option value="">請選擇 C</option>';
+      [...cSet].forEach(v=>{
+        const o = document.createElement("option");
+        o.value = o.textContent = v;
+        selectB2.appendChild(o);
+      });
+    } else {
+      selectB2.style.display = "none";
+    }
+
+    extras.innerHTML = "";
   });
 
-  if (val === "雞蛋糕") {
-    b2.style.display = "inline-block";
-    b2.innerHTML = '<option value="">請選擇 C</option>';
-    [...cSet].forEach(v => {
-      const opt = document.createElement("option");
-      opt.value = opt.textContent = v;
-      b2.appendChild(opt);
-    });
-  } else {
-    b2.style.display = "none";
-  }
+  selectB1.addEventListener("change", () => {
+    const valA = selectA.value.trim();
+    const valB = selectB1.value.trim();
+    const row = grid.find(r=>r?.[0]?.trim()===valA && r?.[1]?.trim()===valB);
+    if (!row) return;
+    const opts = row.slice(5,15).map(v=>v?.trim()).filter(Boolean);
+    extras.innerHTML = "";
+    for (let i = 1; i <= 10; i++) {
+      const label = document.createElement("label");
+      label.textContent = `附${i}：`;
 
-  group.innerHTML = '';
-  markInvalidSelects();
-});
-
-// 第二層 B1 → 抓對應 F~O，建立附1~附10 選單，皆共用值
-document.getElementById("selectB1").addEventListener("change", e => {
-  const valA = document.getElementById("selectA").value.trim();
-  const valB = e.target.value.trim();
-  const group = document.getElementById("extraGroup");
-  group.innerHTML = "";
-
-  const targetRow = grid
-    .map((row, r) => ({ row, r }))
-    .find(item =>
-      item.r >= 10 &&
-      item.r <= 105 &&
-      item.row?.[0]?.trim() === valA &&
-      item.row?.[1]?.trim() === valB
-    );
-
-  if (!targetRow) return;
-
-  const options = (targetRow.row.slice(5, 15) || []).map(v => v?.trim()).filter(Boolean);
-  if (options.length === 0) return;
-
-  for (let i = 1; i <= 10; i++) {
-    const label = document.createElement("label");
-    label.textContent = `附${i}：`;
-
-    const sel = document.createElement("select");
-    sel.innerHTML = `<option value="">附${i}</option>`;
-    options.forEach(optVal => {
-      const opt = document.createElement("option");
-      opt.value = opt.textContent = optVal;
-      sel.appendChild(opt);
-    });
-
-    sel.addEventListener("change", markInvalidSelects);
-    group.appendChild(label);
-    group.appendChild(sel);
-  }
-
-  markInvalidSelects();
+      const sel = document.createElement("select");
+      sel.innerHTML = `<option value="">附${i}</option>`;
+      opts.forEach(v=>{
+        const o = document.createElement("option");
+        o.value = o.textContent = v;
+        sel.appendChild(o);
+      });
+      extras.appendChild(label);
+      extras.appendChild(sel);
+    }
+  });
+}
+  // 綁定「➕ 新增客人」按鈕
+document.getElementById("addCustomerBtn").addEventListener("click", () => {
+  addCustomerBlock();
 });
 
 // 登出邏輯
 document.getElementById("logoutBtn").addEventListener("click", () => {
-  if (confirm("是否登出並重新登入？")) {
+  if (confirm("是否登出並清除金鑰？")) {
     localStorage.removeItem(TAG);
     location.reload();
   }
 });
 </script>
+
 </body>
 </html>
