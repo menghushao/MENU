@@ -130,10 +130,9 @@
 const TAG = "entry-token";
 let grid = [], customerCount = 0;
 
-// 離開提示
 window.addEventListener("beforeunload", e => {
   e.preventDefault();
-  e.returnValue = "你確定要離開？資料將遺失";
+  e.returnValue = "你確定要離開？資料將會遺失";
 });
   function markInvalid(el) {
   const isSelect = el.tagName === "SELECT";
@@ -170,7 +169,7 @@ function markInvalidAll() {
     });
     grid = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
     document.getElementById("loader").style.display = "none";
-    addCustomerCard();
+    addCustomerCard(); // 🚀 初始化第一筆客人
   } catch (err) {
     document.getElementById("loader").textContent = "❌ 載入失敗";
     console.error(err);
@@ -241,9 +240,8 @@ function updateOrderNumbers(wrap) {
   left.className = "groupHeader";
   left.append(del, title);
 
-  header.append(left, state, timeLabel);
+  header.append(left, state, timeLabel, summary);
   card.appendChild(header);
-  card.appendChild(summary);
 
   const row = document.createElement("div");
   row.className = "rowLine";
@@ -271,6 +269,11 @@ function updateOrderNumbers(wrap) {
   `;
   markInvalid(payment);
 
+  const pickupTime = document.createElement("input");
+  pickupTime.type = "datetime-local";
+  pickupTime.placeholder = "取餐時間";
+  markInvalid(pickupTime);
+
   const delivery = document.createElement("input");
   delivery.placeholder = "外送資訊";
   markInvalid(delivery);
@@ -283,14 +286,10 @@ function updateOrderNumbers(wrap) {
   adjust.placeholder = "金額調整";
   markInvalid(adjust);
 
-  const pickupTime = document.createElement("input");
-  pickupTime.type = "datetime-local";
-  markInvalid(pickupTime);
-
   const boxChk = document.createElement("label");
   boxChk.innerHTML = `<input type="checkbox" /> 自備容器`;
 
-  [source, orderNo, payment, delivery, points, adjust, pickupTime].forEach(el =>
+  [source, orderNo, payment, delivery, pickupTime, points, adjust].forEach(el =>
     el.addEventListener("change", () => {
       markInvalidAll();
       triggerSummaryUpdate();
@@ -312,7 +311,7 @@ function updateOrderNumbers(wrap) {
     markInvalidAll();
     triggerSummaryUpdate();
   });
-      row.append(source, orderNo, payment, delivery, points, adjust, pickupTime, boxChk);
+      row.append(source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk);
   card.appendChild(row);
 
   const orderBox = document.createElement("div");
@@ -345,23 +344,56 @@ function updateOrderNumbers(wrap) {
       const valB = selects[1].value.trim();
       const valC = selects[2].style.display !== "none" ? selects[2].value.trim() : "";
       const extras = [...card.querySelectorAll(".extraGrid select")].map(e => e.value.trim()).filter(Boolean).join("+");
-      const parts = [valB, valC].filter(Boolean).sort(); // 順序無關合併用
+      const parts = [valB, valC].filter(Boolean).sort();
       const id = [valA, parts.join("+"), extras].join("|");
       if (!valA || !valB) return;
+
       const found = items.find(i => i.id === id);
       const portion = valA === "雞蛋糕" ? qty * 2 : qty;
       const type = valA === "雞蛋糕" ? "顆" : "份";
-      const label = parts.join("+") + (extras ? `(${extras})` : "");
+
+      const labelRow = grid.find(r => r?.[0] === valA && r?.[1] === valB && (!valC || r?.[2] === valC));
+      const short = labelRow?.[2]?.trim() || valB + (valC ? "+" + valC : "");
+
+      const extraNote = extras ? `(${extras})` : "";
+
       if (found) {
         found.qty += qty;
         found.total += portion;
       } else {
-        items.push({ id, label, type, name: valA, qty, total: portion });
+        items.push({ id, name: valA, qty, total: portion, short: short + extraNote });
       }
     });
 
-    const output = items.map(i => `${i.name}${i.qty}${i.type}，共${i.total}${i.type}。\n${i.label}X${i.qty}`).join("；\n");
-    summary.textContent = output || "（目前尚無可顯示的訂單摘要）";
+    // 按指定順序排序
+    const priority = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
+    items.sort((a, b) => (priority[a.name] ?? 99) - (priority[b.name] ?? 99));
+
+    const countMap = {};
+    let totalCount = 0;
+    items.forEach(i => {
+      if (!countMap[i.name]) countMap[i.name] = 0;
+      countMap[i.name] += i.qty;
+      if (i.name !== "包裝") totalCount += i.qty;
+    });
+
+    const line1 = Object.keys(priority)
+      .filter(name => countMap[name])
+      .map(name => `${name}共${countMap[name]}份`)
+      .join("；") + `，一共${totalCount}份（包裝不列入計算）`;
+
+    const priceList = items.map(i => {
+      const pRow = grid.find(r => r?.[0] === i.name && r?.[1] === i.short.replace(/\(.+\)/, ''));
+      const price = parseInt(pRow?.[20]) || 0;
+      return price * i.qty;
+    });
+
+    const total = priceList.reduce((a, b) => a + b, 0);
+    const line2 = `共 ${total} 元`;
+
+    const line3 = items.map(i => `${i.short}X${i.qty}`).join("；");
+
+    summary.textContent = `${line1}\n${line2}\n${line3}`;
   }
 }
   function addOrderBlock(wrapper) {
