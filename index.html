@@ -133,9 +133,7 @@ let grid = [], customerCount = 0;
 // 🔐 離開提示
 window.addEventListener("beforeunload", e => {
   e.preventDefault();
-  e.returnValue = "";
-});
-  function markInvalid(el) {
+  e.returnValue = "";function markInvalid(el) {
   const isSelect = el.tagName === "SELECT";
   const empty = isSelect ? el.value === "" : !el.value.trim();
   el.classList.toggle("invalid", empty);
@@ -200,8 +198,7 @@ function updateOrderNumbers(wrap) {
     const label = el.querySelector(".orderTitle span");
     if (label) label.textContent = `第 ${i + 1} 組訂單`;
   });
-}
-  function addCustomerCard() {
+}function addCustomerCard() {
   const container = document.getElementById("container");
   const card = document.createElement("div");
   card.className = "groupCard";
@@ -299,8 +296,7 @@ function updateOrderNumbers(wrap) {
 
     markInvalidAll();
     triggerSummaryUpdate();
-  });
-      [source, orderNo, payment, delivery, points, adjust].forEach(el =>
+  });  [source, orderNo, payment, delivery, points, adjust].forEach(el =>
     el.addEventListener("change", () => {
       markInvalidAll();
       triggerSummaryUpdate();
@@ -361,3 +357,4 @@ function updateOrderNumbers(wrap) {
 </script>
 </body>
 </html>
+});
