@@ -87,12 +87,13 @@
     }
 
     .summaryText {
-      margin-top: 8px;
-      background: #f5f5f5;
-      padding: 6px 10px;
       font-size: 13px;
       white-space: pre-line;
       border-left: 4px solid #ccc;
+      background: #f5f5f5;
+      padding: 6px 10px;
+      flex: 1;
+      max-width: 100%;
     }
 
     .rowLine {
@@ -235,7 +236,6 @@ function updateOrderNumbers(wrap) {
   const timeLabel = document.createElement("span");
   const summary = document.createElement("div");
   summary.className = "summaryText";
-  summary.style.marginLeft = "auto";
 
   const left = document.createElement("div");
   left.className = "groupHeader";
@@ -290,7 +290,7 @@ function updateOrderNumbers(wrap) {
   const boxChk = document.createElement("label");
   boxChk.innerHTML = `<input type="checkbox" /> 自備容器`;
 
-  [source, orderNo, payment, delivery, pickupTime, points, adjust].forEach(el =>
+  [state, source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk.querySelector("input")].forEach(el =>
     el.addEventListener("change", () => {
       markInvalidAll();
       triggerSummaryUpdate();
@@ -336,99 +336,76 @@ function updateOrderNumbers(wrap) {
 
   function triggerSummaryUpdate() {
     const orders = [...orderBox.querySelectorAll(".orderCard")];
-    const items = [];
+    const payMethod = payment.value.trim();
+    const groups = [], countMap = {};
+    let totalCount = 0, totalAmount = 0;
 
-    orders.forEach(card => {
-      const valA = card.querySelector("select").value.trim();
-      const qty = parseInt(card.querySelector("input[type='number']").value || "1");
-      const selects = card.querySelectorAll("select");
-      const valB = selects[1].value.trim();
-      const valC = selects[2].style.display !== "none" ? selects[2].value.trim() : "";
-      const extras = [...card.querySelectorAll(".extraGrid select")].map(e => e.value.trim()).filter(Boolean).join("+");
-      const parts = [valB, valC].filter(Boolean).sort();
-      const fullName = parts.join("+");
-      const id = [valA, fullName, extras].join("|");
-      if (!valA || !valB) return;
+    const priority = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
 
-      const row = grid.find(r => r[0]?.trim() === valA && r[1]?.trim() === valB && (!valC || r[2]?.trim() === valC));
-      if (!row) return;
-
-      const short = row[2]?.trim() || valB;
-      const priceMap = {};
-      for (let i = 15; i <= 31; i++) {
-        const key = grid[6][i];
-        priceMap[key] = parseInt(row[i]) || 0;
-      }
-
-      const dCode = row[3]?.trim(); // D 欄特價代號
-      items.push({
-        id, name: valA, full: fullName, short, qty, extras, dCode, priceMap
-      });
-    });
-
-    // 特價邏輯
-    const dMap = {};
+    const deals = {};
     for (let i = 1; i <= 8; i++) {
       const code = grid[i][0]?.trim();
       if (!code) continue;
-      dMap[code] = {
+      deals[code] = {
         qty: parseInt(grid[i][1]),
         price: parseInt(grid[i][2]),
-        methods: grid[i][3]?.trim().split("、") || []
+        methods: (grid[i][3] || "").split("、")
       };
     }
 
-    // 品項排序邏輯
-    const order = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
-    items.sort((a, b) => (order[a.name] ?? 99) - (order[b.name] ?? 99));
+    orders.forEach(order => {
+      const a = order.querySelector("select").value.trim();
+      const qty = parseInt(order.querySelector("input[type='number']").value || "1");
+      const selects = order.querySelectorAll("select");
+      const b1 = selects[1].value.trim();
+      const b2 = selects[2].style.display !== "none" ? selects[2].value.trim() : "";
+      if (!a || !b1) return;
 
-    const countMap = {};
-    let totalCount = 0;
-    const groups = [];
+      const parts = [b1, b2].filter(Boolean).sort();
+      const full = parts.join("+");
 
-    items.forEach(i => {
-      const key = `${i.name}|${i.short}|${i.extras}`;
-      const found = groups.find(g => g.id === key);
-      const portion = i.name === "雞蛋糕" ? i.qty * 2 : i.qty;
-      const label = i.short + (i.extras ? `(${i.extras})` : "");
-      if (found) {
-        found.qty += i.qty;
-        found.total += portion;
-      } else {
-        groups.push({ id: key, name: i.name, short: label, dCode: i.dCode, qty: i.qty, total: portion, priceMap: i.priceMap });
-      }
-      if (i.name !== "包裝") totalCount += i.qty;
-      countMap[i.name] = (countMap[i.name] || 0) + i.qty;
-    });
+      const row = grid.find(r => r[0] === a && r[1] === b1 && (!b2 || r[2] === b2));
+      if (!row) return;
 
-    const payMethod = payment.value.trim();
-    let sum = 0;
+      const short = row[2] || b1;
+      const dCode = row[3];
+      const payCol = grid[6].findIndex(v => v === payMethod);
+      const rawPrice = parseInt(row[payCol]) || 0;
+      const portion = a === "雞蛋糕" ? qty * 2 : qty;
 
-    groups.forEach(g => {
       let subtotal = 0;
-      if (g.dCode && dMap[g.dCode]) {
-        const deal = dMap[g.dCode];
-        if (deal.methods.includes(payMethod)) {
-          const times = Math.floor(g.qty / deal.qty);
-          const remain = g.qty % deal.qty;
-          subtotal = times * deal.price + remain * (g.priceMap[payMethod] || 0);
-        } else {
-          subtotal = g.qty * (g.priceMap[payMethod] || 0);
-        }
+      if (dCode && deals[dCode] && deals[dCode].methods.includes(payMethod)) {
+        const { qty: n, price: p } = deals[dCode];
+        const x = Math.floor(qty / n);
+        const r = qty % n;
+        subtotal = x * p + r * rawPrice;
       } else {
-        subtotal = g.qty * (g.priceMap[payMethod] || 0);
+        subtotal = qty * rawPrice;
       }
-      g.subtotal = subtotal;
-      sum += subtotal;
+
+      const id = `${a}|${short}|${b2}`;
+      const found = groups.find(g => g.id === id);
+      if (found) {
+        found.qty += qty;
+        found.total += portion;
+        found.amount += subtotal;
+      } else {
+        groups.push({ id, name: a, short, qty, total: portion, amount: subtotal });
+      }
+
+      countMap[a] = (countMap[a] || 0) + qty;
+      if (a !== "包裝") totalCount += qty;
+      totalAmount += subtotal;
     });
 
-    const line1 = Object.entries(order)
-      .filter(([name]) => countMap[name])
-      .map(([name]) => `${name}共${countMap[name]}份`)
+    groups.sort((a, b) => (priority[a.name] ?? 99) - (priority[b.name] ?? 99));
+
+    const line1 = Object.entries(priority)
+      .filter(([key]) => countMap[key])
+      .map(([key]) => `${key}共${countMap[key]}份`)
       .join("；") + `，共 ${totalCount} 份`;
 
-    const line2 = `共 ${sum} 元`;
-
+    const line2 = `共 ${totalAmount} 元`;
     const line3 = groups.map(g => `${g.short}X${g.qty}`).join("；");
 
     summary.textContent = `${line1}\n${line2}\n${line3}`;
