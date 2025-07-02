@@ -2,55 +2,98 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📋 多訂單多客人管理頁</title>
+  <title>📦 多客人訂單管理</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 30px; }
+    body { font-family: sans-serif; padding: 24px; }
     select, input[type="text"], input[type="datetime-local"] {
       padding: 6px 12px;
-      font-size: 16px;
-      margin: 8px 12px 12px 0;
+      font-size: 14px;
+      margin: 8px 8px 10px 0;
     }
-    select.invalid { background-color: #ffe4e1 !important; }
-    .orderCard, .orderItem {
+    select.invalid, input.invalid {
+      background-color: #ffe4e1 !important;
+    }
+
+    .btn {
+      cursor: pointer;
+      font-size: 13px;
+      padding: 4px 8px;
+      margin: 2px;
+      border: 1px solid #aaa;
+    }
+    .btn.add { background: #e3f2fd; }
+    .btn.del { background: #ffe4e1; }
+
+    .groupCard {
       border: 2px dashed #ccc;
       padding: 16px;
-      margin-bottom: 20px;
-      position: relative;
+      margin-bottom: 24px;
     }
-    .orderTitle {
-      font-weight: bold;
-      font-size: 18px;
-      margin-bottom: 12px;
-      color: #444;
-    }
-    .rowFlex { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
-    .groupTitle {
+    .groupHeader {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 12px;
     }
-    .groupTitle h3 { margin: 0; }
-    .btn { cursor: pointer; padding: 4px 8px; font-size: 14px; }
-    .btn.del { background: #fdd; border: 1px solid #c66; }
-    .btn.add { background: #def; border: 1px solid #39f; }
+    .groupTitle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .orderContainer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .orderCard {
+      border: 1px solid #999;
+      padding: 12px;
+      min-width: 240px;
+      max-width: 300px;
+      background: #f9f9f9;
+    }
+    .orderTitle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .extraWrap {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .rowLine {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
     #logoutBtn {
       position: fixed;
       top: 10px;
       right: 10px;
       background: #eee;
       border: 1px solid #ccc;
-      padding: 4px 8px;
+      padding: 4px 10px;
       cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-<h2>📦 多組訂單處理器</h2>
+<h2>📋 多客人訂單系統</h2>
 <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
-<div id="customerContainer"></div>
+<div id="container"></div>
 <div id="loader">🔐 資料載入中...</div>
 <button id="logoutBtn">🔓 登出金鑰</button>
 
@@ -58,17 +101,20 @@
 const TAG = "entry-token";
 let grid = [], customerCount = 0;
 
-// 頁面刷新或關閉提示
+// 離開提示
 window.addEventListener("beforeunload", e => {
   e.preventDefault();
   e.returnValue = "";
 });
-
-const markInvalidSelects = (wrap) => {
-  wrap.querySelectorAll("select").forEach(sel => {
-    sel.classList.toggle("invalid", sel.value === "");
+  // 樣式標記所有預設選單
+function markInvalidAll() {
+  document.querySelectorAll("select, input[type='text'], input[type='datetime-local']").forEach(el => {
+    const isSelect = el.tagName === "SELECT";
+    if (isSelect && el.value === "") el.classList.add("invalid");
+    else if (!isSelect && el.placeholder && !el.value) el.classList.add("invalid");
+    else el.classList.remove("invalid");
   });
-};
+}
 
 (async () => {
   const cached = JSON.parse(localStorage.getItem(TAG) || "null");
@@ -92,154 +138,188 @@ const markInvalidSelects = (wrap) => {
     const ivHex = CryptoJS.enc.Hex.parse(iv);
     const encrypted = CryptoJS.enc.Base64.parse(ciphertext);
     const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, {
-      iv: ivHex, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
+      iv: ivHex,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
     });
-    grid = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
+    const raw = decrypted.toString(CryptoJS.enc.Utf8);
+    grid = JSON.parse(raw);
     document.getElementById("loader").style.display = "none";
-    addCustomerBlock(); // 初始化第一組
+    addCustomerCard(); // 初始化
   } catch (err) {
-    document.getElementById("loader").textContent = "❌ 載入失敗";
+    document.getElementById("loader").textContent = "❌ 載入錯誤";
     console.error(err);
   }
 })();
-  function addCustomerBlock() {
+
+document.getElementById("addCustomerBtn").addEventListener("click", () => {
+  addCustomerCard();
+});
+
+// 🔧 建立客人主卡
+function addCustomerCard() {
   customerCount++;
-  const container = document.getElementById("customerContainer");
+  const container = document.getElementById("container");
 
   const card = document.createElement("div");
-  card.className = "orderCard";
+  card.className = "groupCard";
 
-  const titleBar = document.createElement("div");
-  titleBar.className = "groupTitle";
-  titleBar.innerHTML = `<h3>第 ${customerCount} 組客人</h3>`;
+  const header = document.createElement("div");
+  header.className = "groupHeader";
+
+  const left = document.createElement("div");
+  left.className = "groupTitle";
   const delBtn = document.createElement("button");
-  delBtn.textContent = "❌ 刪除";
   delBtn.className = "btn del";
+  delBtn.textContent = "❌";
   delBtn.onclick = () => {
-    if (confirm("確定要刪除此組客人？")) card.remove();
+    if (confirm("確定刪除此客人？")) card.remove();
   };
-  titleBar.appendChild(delBtn);
-  card.appendChild(titleBar);
+  left.appendChild(delBtn);
+  const title = document.createElement("h3");
+  title.textContent = `第 ${customerCount} 組客人`;
+  left.appendChild(title);
 
-  const topRow = document.createElement("div");
-  topRow.className = "rowFlex";
-  topRow.innerHTML = `
-    <label>顧客來源：</label>
-    <select>
-      <option value="">顧客來源</option><option>到店</option><option>電話</option>
-      <option>LINE</option><option>FB</option><option>IG</option><option>簡訊</option><option>Ｕber Eats</option>
-    </select>
-    <input type="text" placeholder="填入單號" style="display:none"/>
-    <select>
-      <option value="">支付方式</option><option>現金</option><option>信用卡</option>
-      <option>LINE Pay</option><option>Apple Pay</option><option>Ｕber Eats</option>
-    </select>
-    <label>取餐時間：</label><input type="datetime-local" />
-    <label><input type="checkbox" /> 外送</label>
-    <label>集點卡兌換：</label>
-    <select><option value="">集點卡兌換</option>${[...Array(10)].map((_,i)=>`<option>${i+1}</option>`).join("")}</select>
-    <input type="text" placeholder="自訂兌換" style="width:60px"/>
-    <label><input type="checkbox" /> 雞蛋糕自備容器</label>
-    <input type="text" placeholder="金額調整"/>
+  const right = document.createElement("select");
+  right.innerHTML = `
+    <option>已出貨</option>
+    <option>已結待製</option>
+    <option selected>未結待製</option>
+    <option>已結待取</option>
+    <option>未結待取</option>
   `;
-  card.appendChild(topRow);
 
-  const orderList = document.createElement("div");
-  card.appendChild(orderList);
+  header.appendChild(left);
+  header.appendChild(right);
+  card.appendChild(header);
+    const top = document.createElement("div");
+  top.className = "rowLine";
+  const source = document.createElement("select");
+  source.innerHTML = `
+    <option value="">顧客來源</option><option>到店</option><option>電話</option>
+    <option>LINE</option><option>FB</option><option>IG</option><option>簡訊</option><option>Ｕber Eats</option>
+  `;
+  const orderNo = document.createElement("input");
+  orderNo.placeholder = "填入單號";
+  orderNo.style.display = "none";
+
+  const time = document.createElement("span");
+
+  source.addEventListener("change", e => {
+    const v = source.value.trim();
+    orderNo.style.display = v === "Ｕber Eats" ? "inline-block" : "none";
+
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
+    time.textContent = `選擇時間：${hh}:${mm}:${ss}`;
+    markInvalidAll();
+  });
+
+  const payment = document.createElement("select");
+  payment.innerHTML = `
+    <option value="">支付方式</option>
+    <option>現金</option><option>信用卡</option>
+    <option>LINE Pay</option><option>Apple Pay</option>
+    <option>Ｕber Eats</option>
+  `;
+
+  const delivery = document.createElement("input");
+  delivery.placeholder = "外送資訊";
+
+  const points = document.createElement("select");
+  points.innerHTML = `<option value="">集點卡兌換</option>${[...Array(10)].map((_,i)=>`<option>${i+1}</option>`).join("")}`;
+
+  const pointText = document.createElement("input");
+  pointText.placeholder = "自訂兌換";
+
+  const adjust = document.createElement("input");
+  adjust.placeholder = "金額調整";
+
+  const boxChk = document.createElement("label");
+  boxChk.innerHTML = `<input type="checkbox" /> 自備容器`;
+
+  [source, orderNo, payment, delivery, points, pointText, adjust].forEach(el =>
+    el.addEventListener("change", markInvalidAll)
+  );
+
+  top.append(source, orderNo, payment, delivery, points, pointText, adjust, boxChk, time);
+  card.appendChild(top);
+
+  // 訂單區
+  const orderBox = document.createElement("div");
+  orderBox.className = "orderContainer";
+  card.appendChild(orderBox);
 
   const addOrderBtn = document.createElement("button");
   addOrderBtn.className = "btn add";
   addOrderBtn.textContent = "➕ 新增訂單";
-  addOrderBtn.onclick = () => addOrderBlock(orderList);
+  addOrderBtn.onclick = () => addOrderBlock(orderBox);
   card.appendChild(addOrderBtn);
 
   container.appendChild(card);
-
-  // 初始加一筆訂單
-  addOrderBlock(orderList);
+  addOrderBlock(orderBox);
 }
-  function addOrderBlock(parentDiv) {
-  const orderCount = parentDiv.querySelectorAll(".orderItem").length + 1;
+  function addOrderBlock(wrapper) {
+  const idx = wrapper.children.length + 1;
 
-  const wrapper = document.createElement("div");
-  wrapper.className = "orderItem";
+  const card = document.createElement("div");
+  card.className = "orderCard";
 
-  const orderTitle = document.createElement("div");
-  orderTitle.innerHTML = `<strong>第 ${orderCount} 組訂單</strong>`;
-  const delBtn = document.createElement("button");
-  delBtn.textContent = "❌ 刪除訂單";
-  delBtn.className = "btn del";
-  delBtn.style.float = "right";
-  delBtn.onclick = () => {
-    if (confirm("確定刪除此訂單？")) wrapper.remove();
+  const title = document.createElement("div");
+  title.className = "orderTitle";
+  title.innerHTML = `<span>第 ${idx} 組訂單</span>`;
+  const del = document.createElement("button");
+  del.textContent = "❌";
+  del.className = "btn del";
+  del.onclick = () => {
+    if (confirm("刪除這筆訂單？")) card.remove();
   };
-  orderTitle.appendChild(delBtn);
-  wrapper.appendChild(orderTitle);
+  title.appendChild(del);
+  card.appendChild(title);
 
-  // A 欄
   const selectA = document.createElement("select");
-  selectA.innerHTML = '<option value="">請選擇 A</option>';
-  new Set(grid.slice(10,106).map(r=>r?.[0]).filter(Boolean)).forEach(v=>{
+  selectA.innerHTML = `<option value="">請選擇 A</option>`;
+  new Set(grid.slice(10,106).map(r=>r?.[0]).filter(Boolean)).forEach(v => {
     const o = document.createElement("option");
     o.textContent = o.value = v;
     selectA.appendChild(o);
   });
 
-  // B1/B2
   const selectB1 = document.createElement("select");
-  selectB1.innerHTML = '<option value="">請選擇 B</option>';
+  selectB1.innerHTML = `<option value="">請選擇 B</option>`;
+
   const selectB2 = document.createElement("select");
   selectB2.style.display = "none";
 
-  const bcRow = document.createElement("div");
-  bcRow.className = "rowFlex";
-  bcRow.appendChild(selectA);
-  bcRow.appendChild(selectB1);
-  bcRow.appendChild(selectB2);
-  wrapper.appendChild(bcRow);
+  const rowA = document.createElement("div");
+  rowA.className = "rowLine";
+  rowA.append(selectA, selectB1, selectB2);
+  card.appendChild(rowA);
 
-  // 附區塊
-  const extraWrap = document.createElement("div");
-  extraWrap.style.display = "grid";
-  extraWrap.style.gridTemplateColumns = "repeat(5, minmax(120px, 1fr))";
-  extraWrap.style.gap = "12px 16px";
-  extraWrap.style.marginTop = "12px";
-  wrapper.appendChild(extraWrap);
+  const extra = document.createElement("div");
+  extra.className = "extraWrap";
+  card.appendChild(extra);
 
-  parentDiv.appendChild(wrapper);
-      const updateExtras = (row) => {
-    const options = row.slice(5,15).map(v=>v?.trim()).filter(Boolean);
-    extraWrap.innerHTML = "";
-    for (let i = 1; i <= 10; i++) {
-      const sel = document.createElement("select");
-      sel.innerHTML = `<option value="">附${i}</option>`;
-      options.forEach(val => {
-        const o = document.createElement("option");
-        o.textContent = o.value = val;
-        sel.appendChild(o);
-      });
-      sel.classList.add("extra");
-      extraWrap.appendChild(sel);
-    }
-  };
-
+  // 💡 A 選擇後 → 動態產生 B1 / B2
   selectA.addEventListener("change", () => {
-    const valA = selectA.value.trim();
-    const matched = grid.filter(r=>r?.[0]?.trim() === valA);
-    const bSet = new Set(matched.map(r=>r?.[1]).filter(Boolean));
-    const cSet = new Set(matched.map(r=>r?.[2]).filter(Boolean));
+    const val = selectA.value.trim();
+    const matched = grid.filter(r => r?.[0]?.trim() === val);
+    const bSet = new Set(matched.map(r => r?.[1]).filter(Boolean));
+    const cSet = new Set(matched.map(r => r?.[2]).filter(Boolean));
 
-    selectB1.innerHTML = '<option value="">請選擇 B</option>';
-    [...bSet].forEach(v=>{
+    selectB1.innerHTML = `<option value="">請選擇 B</option>`;
+    [...bSet].forEach(v => {
       const o = document.createElement("option");
       o.textContent = o.value = v;
       selectB1.appendChild(o);
     });
 
-    if (valA === "雞蛋糕") {
+    if (val === "雞蛋糕") {
       selectB2.style.display = "inline-block";
-      selectB2.innerHTML = '<option value="">請選擇 C</option>';
-      [...cSet].forEach(v=>{
+      selectB2.innerHTML = `<option value="">請選擇 C</option>`;
+      [...cSet].forEach(v => {
         const o = document.createElement("option");
         o.textContent = o.value = v;
         selectB2.appendChild(o);
@@ -248,18 +328,40 @@ const markInvalidSelects = (wrap) => {
       selectB2.style.display = "none";
     }
 
-    extraWrap.innerHTML = "";
+    extra.innerHTML = "";
+    markInvalidAll();
   });
 
+  // 💡 B1 選擇後 → 找對應列建立附1~附10
   selectB1.addEventListener("change", () => {
-    const valA = selectA.value.trim();
-    const valB = selectB1.value.trim();
-    const row = grid.find(r=>r?.[0]?.trim() === valA && r?.[1]?.trim() === valB);
-    if (row) updateExtras(row);
+    const aVal = selectA.value.trim();
+    const bVal = selectB1.value.trim();
+    const row = grid.find(r => r?.[0]?.trim() === aVal && r?.[1]?.trim() === bVal);
+    if (!row) return;
+
+    const opts = row.slice(5,15).map(v => v?.trim()).filter(Boolean);
+    extra.innerHTML = "";
+
+    for (let i = 1; i <= 10; i++) {
+      const sel = document.createElement("select");
+      sel.innerHTML = `<option value="">附${i}</option>`;
+      opts.forEach(v => {
+        const o = document.createElement("option");
+        o.textContent = o.value = v;
+        sel.appendChild(o);
+      });
+      sel.addEventListener("change", markInvalidAll);
+      extra.appendChild(sel);
+    }
+
+    markInvalidAll();
   });
+
+  [selectA, selectB1, selectB2].forEach(s => s.addEventListener("change", markInvalidAll));
+  wrapper.appendChild(card);
 }
 
-// 🔓 登出按鈕
+// 🔓 登出邏輯
 document.getElementById("logoutBtn").addEventListener("click", () => {
   if (confirm("是否登出並清除金鑰？")) {
     localStorage.removeItem(TAG);
