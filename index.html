@@ -2,12 +2,12 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>🔐 A11~A106 下拉選單</title>
+  <title>雙層下拉選單</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 30px; }
-    label { font-weight: bold; }
-    select { padding: 6px 12px; font-size: 16px; margin: 10px 0; }
+    label { font-weight: bold; margin-right: 10px; }
+    select { padding: 6px 12px; font-size: 16px; margin-bottom: 12px; }
     #loader { color: gray; margin-bottom: 10px; }
     #logoutBtn {
       position: fixed;
@@ -22,11 +22,18 @@
 </head>
 <body>
 
-<h2>📋 A11 ~ A106 下拉選單</h2>
-<label for="dropdown">選項：</label>
-<select id="dropdown">
-  <option value="">請等待資料讀取中...</option>
+<h2>📋 雙層下拉選單（A → B）</h2>
+
+<label for="selectA">A11~A106 選項：</label>
+<select id="selectA">
+  <option value="">請等待資料載入...</option>
 </select>
+<br />
+<label for="selectB">對應 B 欄選項：</label>
+<select id="selectB">
+  <option value="">尚未選取 A 項目</option>
+</select>
+
 <div id="loader">🔐 載入並解密中...</div>
 <button id="logoutBtn">🔓 登出金鑰</button>
 
@@ -34,6 +41,7 @@
 const TAG = "entry-token";
 const cached = JSON.parse(localStorage.getItem(TAG) || "null");
 const now = Date.now();
+let grid = [];
 
 (async () => {
   let token = cached && now < cached.expires ? cached.token : null;
@@ -41,7 +49,7 @@ const now = Date.now();
   if (!token) {
     token = prompt("🔐 請輸入 GitHub Token");
     if (!token) {
-      alert("❌ 未輸入，無法載入資料");
+      alert("❌ 未輸入金鑰，無法載入資料");
       return;
     }
     localStorage.setItem(TAG, JSON.stringify({
@@ -51,8 +59,9 @@ const now = Date.now();
   }
 
   const key = CryptoJS.enc.Utf8.parse(token.trim().slice(0, 32).padEnd(32, '0'));
-  const dropdown = document.getElementById("dropdown");
   const loader = document.getElementById("loader");
+  const selectA = document.getElementById("selectA");
+  const selectB = document.getElementById("selectB");
 
   try {
     const res = await fetch("https://raw.githubusercontent.com/menghushao/Order-management-product/main/gridData.json");
@@ -67,32 +76,54 @@ const now = Date.now();
     });
 
     const raw = decrypted.toString(CryptoJS.enc.Utf8);
-    const grid = JSON.parse(raw);
-    const values = new Set();
+    grid = JSON.parse(raw);
 
+    // 填入 selectA 選項
+    const values = new Set();
     for (let r = 10; r <= 105; r++) {
       const val = grid[r]?.[0];
       if (val?.trim()) values.add(val.trim());
     }
 
-    dropdown.innerHTML = '<option value="">請選擇</option>';
+    selectA.innerHTML = '<option value="">請選擇 A 項目</option>';
     [...values].forEach(v => {
       const opt = document.createElement("option");
       opt.value = opt.textContent = v;
-      dropdown.appendChild(opt);
+      selectA.appendChild(opt);
     });
 
-    loader.textContent = `✅ 載入完成，共 ${values.size} 個選項`;
+    loader.textContent = `✅ 載入完成，共 ${values.size} 筆 A 項目`;
+
   } catch (err) {
-    loader.textContent = "❌ 載入或解密失敗，請確認金鑰是否正確";
-    dropdown.innerHTML = '<option value="">讀取失敗</option>';
+    loader.textContent = "❌ 解密或讀取失敗，請確認金鑰";
     console.error(err);
   }
 })();
 
-// 🔓 登出邏輯
+// A 下拉變更 → 更新 B 下拉
+document.getElementById("selectA").addEventListener("change", e => {
+  const selectedA = e.target.value.trim();
+  const selectB = document.getElementById("selectB");
+  const results = new Set();
+
+  for (let r = 10; r <= 105; r++) {
+    if (grid[r]?.[0]?.trim() === selectedA) {
+      const b = grid[r]?.[1];
+      if (b?.trim()) results.add(b.trim());
+    }
+  }
+
+  selectB.innerHTML = '<option value="">請選擇 B 項目</option>';
+  [...results].forEach(val => {
+    const opt = document.createElement("option");
+    opt.value = opt.textContent = val;
+    selectB.appendChild(opt);
+  });
+});
+
+// 登出金鑰
 document.getElementById("logoutBtn").addEventListener("click", () => {
-  if (confirm("確定要登出並清除金鑰？")) {
+  if (confirm("是否登出並重新輸入金鑰？")) {
     localStorage.removeItem(TAG);
     location.reload();
   }
