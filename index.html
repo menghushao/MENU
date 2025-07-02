@@ -46,9 +46,9 @@
 
     const values = new Set();
     for (let r = 10; r <= 105; r++) {
-      const val = grid[r]?.[0];
-      if (val?.trim()) values.add(val.trim());
-    }
+  const val = grid[r]?.[1];  // 
+  if (val?.trim()) values.add(val.trim());
+}
 
     dropdown.innerHTML = '<option value="">請選擇</option>';
     [...values].forEach(v => {
