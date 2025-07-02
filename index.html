@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 訂單管理系統</title>
+  <title>📦 多客人訂單系統</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 24px; }
@@ -49,6 +49,8 @@
       padding: 12px;
       width: 300px;
       background: #f9f9f9;
+      overflow: hidden;
+      word-wrap: break-word;
     }
     .orderTitle {
       display: flex;
@@ -66,9 +68,15 @@
     }
 
     .extraGrid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      display: flex;
+      flex-wrap: wrap;
       gap: 6px;
+      max-width: 100%;
+    }
+
+    .extraGrid select {
+      min-width: 110px;
+      max-width: 120px;
     }
 
     .rowLine {
@@ -139,10 +147,11 @@ function markInvalidAll() {
     const ivHex = CryptoJS.enc.Hex.parse(iv);
     const encrypted = CryptoJS.enc.Base64.parse(ciphertext);
     const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, {
-      iv: ivHex, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
+      iv: ivHex,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
     });
-    const raw = decrypted.toString(CryptoJS.enc.Utf8);
-    grid = JSON.parse(raw);
+    grid = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
     document.getElementById("loader").style.display = "none";
     addCustomerCard(); // 初始一組
   } catch (err) {
@@ -151,9 +160,11 @@ function markInvalidAll() {
   }
 })();
 
-document.getElementById("addCustomerBtn").addEventListener("click", () => addCustomerCard());
+document.getElementById("addCustomerBtn").addEventListener("click", () => {
+  addCustomerCard();
+});
 
-// 🔧 產生客人區塊
+// 🔧 建立客人卡
 function addCustomerCard() {
   const container = document.getElementById("container");
   const card = document.createElement("div");
@@ -173,7 +184,6 @@ function addCustomerCard() {
   };
 
   const title = document.createElement("h3");
-
   const state = document.createElement("select");
   state.innerHTML = `
     <option>已出貨</option>
@@ -200,41 +210,50 @@ function addCustomerCard() {
     <option>LINE</option><option>FB</option><option>IG</option>
     <option>簡訊</option><option>Ｕber Eats</option>
   `;
+  markInvalid(source);
 
   const orderNo = document.createElement("input");
   orderNo.placeholder = "填入單號";
   orderNo.style.display = "none";
+  markInvalid(orderNo);
 
   const payment = document.createElement("select");
   payment.innerHTML = `
     <option value="">支付方式</option><option>現金</option><option>信用卡</option>
     <option>LINE Pay</option><option>Apple Pay</option><option>Ｕber Eats</option>
   `;
+  markInvalid(payment);
 
   const delivery = document.createElement("input");
   delivery.placeholder = "外送資訊";
+  markInvalid(delivery);
 
   const points = document.createElement("input");
   points.placeholder = "集點卡兌換數量";
+  markInvalid(points);
 
   const adjust = document.createElement("input");
   adjust.placeholder = "金額調整";
+  markInvalid(adjust);
 
   const boxChk = document.createElement("label");
   boxChk.innerHTML = `<input type="checkbox"> 自備容器`;
 
-  source.addEventListener("change", e => {
+  source.addEventListener("change", () => {
     const val = source.value.trim();
     orderNo.style.display = val === "Ｕber Eats" ? "inline-block" : "none";
 
+    // 自動套用支付方式
     const match = [...payment.options].find(o => o.value === val);
     if (match) payment.value = val;
 
+    // 顯示時間
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, "0");
     const mm = String(now.getMinutes()).padStart(2, "0");
     const ss = String(now.getSeconds()).padStart(2, "0");
-    time.textContent = `${hh}:${mm}:${ss}`;
+    header.lastElementChild.textContent = `${hh}:${mm}:${ss}`;
+
     markInvalidAll();
   });
 
@@ -269,12 +288,12 @@ function addCustomerCard() {
   const title = document.createElement("div");
   title.className = "orderTitle";
   const label = document.createElement("span");
-  label.textContent = "第 X 組訂單"; // 先填上 X，稍後由 updateOrderNumbers 更新
+  label.textContent = "第 X 組訂單"; // 初始化，稍後會更新正確編號
   const del = document.createElement("button");
   del.textContent = "❌";
   del.className = "btn del";
   del.onclick = () => {
-    if (confirm("刪除這筆訂單？")) {
+    if (confirm("刪除此訂單？")) {
       card.remove();
       updateOrderNumbers(wrapper);
     }
@@ -289,22 +308,28 @@ function addCustomerCard() {
     o.value = o.textContent = v;
     a.appendChild(o);
   });
+  markInvalid(a);
 
   const b1 = document.createElement("select");
   b1.innerHTML = `<option value="">請選擇 B</option>`;
+  markInvalid(b1);
 
   const b2 = document.createElement("select");
   b2.innerHTML = `<option value="">請選擇 C</option>`;
   b2.style.display = "none";
+  markInvalid(b2);
 
   const rowA = document.createElement("div");
   rowA.className = "orderSelects";
+
   const firstRow = document.createElement("div");
   firstRow.className = "rowLine";
   firstRow.appendChild(a);
+
   const secondRow = document.createElement("div");
   secondRow.className = "rowLine";
   secondRow.append(b1, b2);
+
   const thirdRow = document.createElement("div");
   thirdRow.className = "extraGrid";
 
@@ -358,6 +383,7 @@ function addCustomerCard() {
         sel.appendChild(o);
       });
       sel.addEventListener("change", markInvalidAll);
+      markInvalid(sel);
       thirdRow.appendChild(sel);
     }
 
@@ -369,15 +395,15 @@ function addCustomerCard() {
   updateOrderNumbers(wrapper);
 }
 
-// 🔁 更新客人組編號
+// 🧠 更新「客人」的編號
 function updateCustomerNumbers() {
   document.querySelectorAll(".groupCard").forEach((g, i) => {
     const h3 = g.querySelector("h3");
-    h3.textContent = `第 ${i + 1} 組客人`;
+    if (h3) h3.textContent = `第 ${i + 1} 組客人`;
   });
 }
 
-// 🔁 更新訂單編號
+// 🧠 更新該「客人內部」訂單順序
 function updateOrderNumbers(wrap) {
   wrap.querySelectorAll(".orderCard").forEach((el, i) => {
     const label = el.querySelector(".orderTitle span");
@@ -385,7 +411,7 @@ function updateOrderNumbers(wrap) {
   });
 }
 
-// 🔓 登出
+// 🔓 登出邏輯
 document.getElementById("logoutBtn").addEventListener("click", () => {
   if (confirm("是否登出？")) {
     localStorage.removeItem(TAG);
@@ -395,3 +421,4 @@ document.getElementById("logoutBtn").addEventListener("click", () => {
 </script>
 </body>
 </html>
+  
