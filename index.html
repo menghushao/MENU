@@ -98,7 +98,7 @@
     // 建立 A11~A106 的第 2 欄選項（c = 1）
     const values = new Set();
     for (let r = 10; r <= 105; r++) {
-      const val = gridData[r]?.[1];
+      const val = gridData[r]?.[0];
       if (val?.trim()) values.add(val.trim());
     }
 
