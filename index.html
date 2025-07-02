@@ -2,13 +2,17 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>雙層條件式下拉選單</title>
+  <title>多層下拉選單</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 30px; }
-    select { padding: 6px 12px; font-size: 16px; margin-bottom: 12px; margin-right: 10px; }
-    label { font-weight: bold; }
-    #loader { color: gray; margin: 10px 0; }
+    label { font-weight: bold; margin-right: 8px; }
+    select {
+      padding: 6px 12px;
+      font-size: 16px;
+      margin: 6px 12px 12px 0;
+      max-width: 300px;
+    }
     #logoutBtn {
       position: fixed;
       top: 10px;
@@ -18,30 +22,49 @@
       padding: 4px 8px;
       cursor: pointer;
     }
+    #loader { color: gray; margin: 10px 0; }
   </style>
 </head>
 <body>
 
-<h2>📋 A → B 選項（特例：雞蛋糕會出現兩個）</h2>
+<h2>📋 動態下拉選單（含客戶來源 & 多欄連動）</h2>
 
+<!-- 顧客來源 -->
+<label for="sourceSelect">顧客來源：</label>
+<select id="sourceSelect">
+  <option value="">顧客來源</option>
+  <option>到店</option>
+  <option>電話</option>
+  <option>LINE</option>
+  <option>FB</option>
+  <option>IG</option>
+  <option>簡訊</option>
+</select>
+
+<!-- 來自 P7~AD7 的資料 -->
+<select id="p7ad7Select">
+  <option value="">載入中...</option>
+</select>
+<br />
+
+<!-- 第一層 A11~A106 -->
 <label for="selectA">第一層（A 欄）：</label>
 <select id="selectA">
   <option value="">請等待資料載入...</option>
 </select>
-<br/>
+<br />
 
-<div id="bGroup">
-  <label for="selectB1">第二層（B1）：</label>
-  <select id="selectB1">
-    <option value="">尚未選取</option>
-  </select>
-  
-  <select id="selectB2" style="display: none;">
-    <option value="">尚未選取</option>
-  </select>
-</div>
+<!-- 第二層 B -->
+<label for="selectB">第二層（B 欄）：</label>
+<select id="selectB">
+  <option value="">尚未選取 A 項目</option>
+</select>
+<br />
 
-<div id="loader">🔐 解密並載入中...</div>
+<!-- 🔽 依據第二層，產生 F1~O1 的對應 10 個下拉選單 -->
+<div id="multiSelectGroup" style="margin-top: 10px;"></div>
+
+<div id="loader">🔐 載入並解密資料中...</div>
 <button id="logoutBtn">🔓 登出金鑰</button>
 
 <script>
@@ -55,10 +78,7 @@ let grid = [];
 
   if (!token) {
     token = prompt("🔐 請輸入 GitHub Token");
-    if (!token) {
-      alert("❌ 未輸入金鑰");
-      return;
-    }
+    if (!token) return alert("❌ 未輸入金鑰");
     localStorage.setItem(TAG, JSON.stringify({
       token: token.trim(),
       expires: now + 24 * 60 * 60 * 1000
@@ -67,9 +87,6 @@ let grid = [];
 
   const key = CryptoJS.enc.Utf8.parse(token.trim().slice(0, 32).padEnd(32, '0'));
   const loader = document.getElementById("loader");
-  const selectA = document.getElementById("selectA");
-  const selectB1 = document.getElementById("selectB1");
-  const selectB2 = document.getElementById("selectB2");
 
   try {
     const res = await fetch("https://raw.githubusercontent.com/menghushao/Order-management-product/main/gridData.json");
@@ -86,72 +103,85 @@ let grid = [];
     const raw = decrypted.toString(CryptoJS.enc.Utf8);
     grid = JSON.parse(raw);
 
-    const values = new Set();
+    // 初始化 A 下拉（A11~A106）
+    const selectA = document.getElementById("selectA");
+    const setA = new Set();
     for (let r = 10; r <= 105; r++) {
       const val = grid[r]?.[0];
-      if (val?.trim()) values.add(val.trim());
+      if (val?.trim()) setA.add(val.trim());
     }
-
     selectA.innerHTML = '<option value="">請選擇 A 項目</option>';
-    [...values].forEach(v => {
+    [...setA].forEach(v => {
       const opt = document.createElement("option");
       opt.value = opt.textContent = v;
       selectA.appendChild(opt);
     });
 
-    loader.textContent = `✅ 已載入 ${values.size} 個選項`;
+    // 初始化 P7~AD7 下拉
+    const pSel = document.getElementById("p7ad7Select");
+    const pRow = grid[6] || [];
+    const opts = pRow.slice(15, 30).filter(Boolean);
+    pSel.innerHTML = '<option value="">請選擇</option>';
+    [...new Set(opts)].forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = opt.textContent = v;
+      pSel.appendChild(opt);
+    });
+
+    loader.textContent = "✅ 資料載入完成";
   } catch (err) {
-    loader.textContent = "❌ 解密或載入失敗";
+    loader.textContent = "❌ 載入或解密失敗";
     console.error(err);
   }
 })();
 
-// A 欄選擇變化時，更新 B
+// A → B 選單邏輯
 document.getElementById("selectA").addEventListener("change", e => {
-  const selected = e.target.value.trim();
-  const selectB1 = document.getElementById("selectB1");
-  const selectB2 = document.getElementById("selectB2");
-  const bGroup = document.getElementById("bGroup");
+  const selectedA = e.target.value.trim();
+  const selectB = document.getElementById("selectB");
+  const group = document.getElementById("multiSelectGroup");
 
   const matched = grid
     .map((row, r) => ({ row, r }))
-    .filter(item => item.r >= 10 && item.r <= 105 && item.row?.[0]?.trim() === selected);
+    .filter(item => item.r >= 10 && item.r <= 105 && item.row?.[0]?.trim() === selectedA);
 
-  const b1Set = new Set();
-  const b2Set = new Set();
-
+  const bSet = new Set();
   matched.forEach(item => {
-    const b1 = item.row?.[1];
-    const b2 = item.row?.[2];
-    if (b1?.trim()) b1Set.add(b1.trim());
-    if (selected === "雞蛋糕" && b2?.trim()) b2Set.add(b2.trim());
+    const b = item.row?.[1];
+    if (b?.trim()) bSet.add(b.trim());
   });
 
-  // B1 設定
-  selectB1.innerHTML = '<option value="">請選擇 B1</option>';
-  [...b1Set].forEach(v => {
+  selectB.innerHTML = '<option value="">請選擇 B 項目</option>';
+  [...bSet].forEach(v => {
     const opt = document.createElement("option");
     opt.value = opt.textContent = v;
-    selectB1.appendChild(opt);
+    selectB.appendChild(opt);
   });
 
-  // B2 設定（僅限雞蛋糕）
-  if (selected === "雞蛋糕") {
-    selectB2.style.display = "inline-block";
-    selectB2.innerHTML = '<option value="">請選擇 B2</option>';
-    [...b2Set].forEach(v => {
-      const opt = document.createElement("option");
-      opt.value = opt.textContent = v;
-      selectB2.appendChild(opt);
-    });
-  } else {
-    selectB2.style.display = "none";
-  }
+  group.innerHTML = ''; // 清空 10 個下拉
 });
 
-// 登出金鑰
+// B → 多下拉
+document.getElementById("selectB").addEventListener("change", e => {
+  const group = document.getElementById("multiSelectGroup");
+  group.innerHTML = '';
+
+  const headers = (grid[0] || []).slice(5, 15); // F1~O1 共 10 個
+  headers.forEach((h, idx) => {
+    const label = document.createElement("label");
+    label.textContent = `項目 ${idx + 1}：`;
+
+    const sel = document.createElement("select");
+    sel.innerHTML = `<option value="">${h || `第 ${idx + 6} 欄`}</option>`;
+
+    group.appendChild(label);
+    group.appendChild(sel);
+  });
+});
+
+// 登出邏輯
 document.getElementById("logoutBtn").addEventListener("click", () => {
-  if (confirm("登出並重新登入？")) {
+  if (confirm("要登出並重新登入嗎？")) {
     localStorage.removeItem(TAG);
     location.reload();
   }
