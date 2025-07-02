@@ -2,22 +2,18 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📋 多層條件式下拉選單（附選修正）</title>
+  <title>📋 全功能下拉選單頁</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 30px; }
     label { font-weight: bold; margin-right: 8px; }
-    select, input[type="text"] {
+    select, input[type="text"], input[type="datetime-local"] {
       padding: 6px 12px;
       font-size: 16px;
-      margin: 8px 12px 16px 0;
+      margin: 8px 12px 12px 0;
     }
-    select.invalid {
-      background-color: #ffe4e1 !important; /* 淺粉紅 */
-    }
-    #orderNumber {
-      display: none;
-    }
+    select.invalid { background-color: #ffe4e1 !important; }
+    #orderNumber { display: none; }
     #logoutBtn {
       position: fixed;
       top: 10px;
@@ -27,56 +23,79 @@
       padding: 4px 8px;
       cursor: pointer;
     }
-    #loader { color: gray; margin-top: 10px; }
+    #formRow { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
+    #extraGroup { margin-top: 20px; }
+    .inputGroup { display: flex; align-items: center; margin-right: 16px; }
   </style>
 </head>
 <body>
 
-<h2>🔽 多層條件式下拉選單（修正版）</h2>
+<h2>🔽 全功能下拉選單整合</h2>
 
-<!-- 顧客來源 -->
-<label for="sourceSelect">顧客來源：</label>
-<select id="sourceSelect">
-  <option value="">顧客來源</option>
-  <option>到店</option>
-  <option>電話</option>
-  <option>LINE</option>
-  <option>FB</option>
-  <option>IG</option>
-  <option>簡訊</option>
-  <option>Ｕber Eats</option>
-</select>
+<div id="formRow">
+  <!-- 顧客來源 -->
+  <label for="sourceSelect">顧客來源：</label>
+  <select id="sourceSelect">
+    <option value="">顧客來源</option>
+    <option>到店</option>
+    <option>電話</option>
+    <option>LINE</option>
+    <option>FB</option>
+    <option>IG</option>
+    <option>簡訊</option>
+    <option>Ｕber Eats</option>
+  </select>
 
-<!-- 單號輸入欄 -->
-<input type="text" id="orderNumber" placeholder="填入單號" />
+  <!-- 單號欄 -->
+  <input type="text" id="orderNumber" placeholder="填入單號" />
 
-<!-- 支付方式 -->
-<select id="paymentSelect">
-  <option value="">支付方式</option>
-  <option>現金</option>
-  <option>信用卡</option>
-  <option>LINE Pay</option>
-  <option>Apple Pay</option>
-  <option>Ｕber Eats</option>
-</select>
+  <!-- 支付方式 -->
+  <select id="paymentSelect">
+    <option value="">支付方式</option>
+    <option>現金</option>
+    <option>信用卡</option>
+    <option>LINE Pay</option>
+    <option>Apple Pay</option>
+    <option>Ｕber Eats</option>
+  </select>
 
-<!-- 第一層 -->
-<br />
-<label for="selectA">第一層（A11~A106）：</label>
-<select id="selectA">
-  <option value="">請等待載入...</option>
-</select>
+  <!-- 取餐時間 -->
+  <label for="pickupTime">取餐時間：</label>
+  <input type="datetime-local" id="pickupTime" />
 
-<!-- 第二層 -->
-<div id="bcGroup">
-  <label for="selectB1">第二層（B1）：</label>
-  <select id="selectB1"><option value="">尚未選取</option></select>
-  <select id="selectB2" style="display: none;"><option value="">尚未選取</option></select>
+  <!-- 外送勾勾 -->
+  <label><input type="checkbox" id="deliveryChk" /> 外送</label>
+
+  <!-- 集點卡 -->
+  <label for="pointsSelect">集點卡兌換：</label>
+  <select id="pointsSelect">
+    <option value="">集點卡兌換</option>
+    ${[...Array(10)].map((_, i) => `<option>${i + 1}</option>`).join("")}
+  </select>
+  <input type="text" id="pointsInput" placeholder="自訂兌換值" style="width: 60px;" />
+
+  <!-- 自備容器 -->
+  <label><input type="checkbox" id="boxChk" /> 雞蛋糕自備容器</label>
+
+  <!-- 金額調整 -->
+  <input type="text" id="adjustment" placeholder="金額調整" />
 </div>
 
-<!-- 附選單區 -->
+<!-- A → B1/B2 區 -->
+<div style="display: flex; align-items: center; gap: 16px; margin-bottom: 12px;">
+  <label for="selectA">第一層：</label>
+  <select id="selectA"><option value="">請等待載入...</option></select>
+
+  <div id="bcGroup">
+    <label for="selectB1">第二層（B1）：</label>
+    <select id="selectB1"><option value="">尚未選取</option></select>
+    <select id="selectB2" style="display: none;"><option value="">尚未選取</option></select>
+  </div>
+</div>
+
+<!-- 附選單 -->
 <div id="extraGroup"></div>
-<div id="loader">🔐 資料載入中...</div>
+<div id="loader">🔐 載入資料中...</div>
 <button id="logoutBtn">🔓 登出金鑰</button>
 
 <script>
@@ -85,29 +104,23 @@ let grid = [];
 
 const markInvalidSelects = () => {
   document.querySelectorAll("select").forEach(sel => {
-    if (sel.value === "") {
-      sel.classList.add("invalid");
-    } else {
-      sel.classList.remove("invalid");
-    }
+    sel.classList.toggle("invalid", sel.value === "");
   });
 };
 
-// 顧客來源切換 → 顯示單號欄位（若選 Uber Eats）
+// 顧客來源變更事件
 document.getElementById("sourceSelect").addEventListener("change", e => {
   const val = e.target.value.trim();
   const payment = document.getElementById("paymentSelect");
   const orderInput = document.getElementById("orderNumber");
-  const match = [...payment.options].find(o => o.value === val);
-  if (match) payment.value = val;
-  orderInput.style.display = (val === "Ｕber Eats") ? "inline-block" : "none";
+  if ([...payment.options].find(o => o.value === val)) payment.value = val;
+  orderInput.style.display = val === "Ｕber Eats" ? "inline-block" : "none";
   markInvalidSelects();
 });
 
-document.getElementById("paymentSelect").addEventListener("change", markInvalidSelects);
-document.getElementById("selectA").addEventListener("change", markInvalidSelects);
-document.getElementById("selectB1").addEventListener("change", markInvalidSelects);
-document.getElementById("selectB2").addEventListener("change", markInvalidSelects);
+["paymentSelect","selectA","selectB1","selectB2","pointsSelect"].forEach(id =>
+  document.getElementById(id).addEventListener("change", markInvalidSelects)
+);
 
 (async () => {
   const cached = JSON.parse(localStorage.getItem(TAG) || "null");
@@ -116,8 +129,7 @@ document.getElementById("selectB2").addEventListener("change", markInvalidSelect
 
   if (!token) {
     token = prompt("🔐 請輸入 GitHub Token");
-    if (!token) return alert("❌ 沒有金鑰無法進入");
-
+    if (!token) return alert("❌ 無法繼續");
     localStorage.setItem(TAG, JSON.stringify({
       token: token.trim(),
       expires: now + 24 * 60 * 60 * 1000
@@ -153,14 +165,14 @@ document.getElementById("selectB2").addEventListener("change", markInvalidSelect
       selectA.appendChild(opt);
     });
 
-    loader.textContent = `✅ 載入 A 選項 ${values.size} 筆`;
+    loader.textContent = `✅ A 欄已載入 ${values.size} 項`;
     markInvalidSelects();
   } catch (err) {
     loader.textContent = "❌ 載入或解密失敗";
     console.error(err);
   }
 })();
-  // A → B/C 下拉邏輯
+  // A → B1/B2 下拉邏輯
 document.getElementById("selectA").addEventListener("change", e => {
   const val = e.target.value.trim();
   const b1 = document.getElementById("selectB1");
@@ -201,7 +213,7 @@ document.getElementById("selectA").addEventListener("change", e => {
   markInvalidSelects();
 });
 
-// B1 → 附1~10：全選單共用同一組 F~G 選項
+// 第二層 B1 → 抓對應 F~O，建立附1~附10 選單，皆共用值
 document.getElementById("selectB1").addEventListener("change", e => {
   const valA = document.getElementById("selectA").value.trim();
   const valB = e.target.value.trim();
@@ -219,9 +231,8 @@ document.getElementById("selectB1").addEventListener("change", e => {
 
   if (!targetRow) return;
 
-  const f = targetRow.row[5];
-  const g = targetRow.row[6];
-  const options = [f, g].filter(Boolean).map(v => v.trim()).filter(v => v);
+  const options = (targetRow.row.slice(5, 15) || []).map(v => v?.trim()).filter(Boolean);
+  if (options.length === 0) return;
 
   for (let i = 1; i <= 10; i++) {
     const label = document.createElement("label");
@@ -243,12 +254,9 @@ document.getElementById("selectB1").addEventListener("change", e => {
   markInvalidSelects();
 });
 
-// 雞蛋糕 B2 選變時也觸發底色更新
-document.getElementById("selectB2").addEventListener("change", markInvalidSelects);
-
-// 登出
+// 登出邏輯
 document.getElementById("logoutBtn").addEventListener("click", () => {
-  if (confirm("是否登出並清除金鑰？")) {
+  if (confirm("是否登出並重新登入？")) {
     localStorage.removeItem(TAG);
     location.reload();
   }
