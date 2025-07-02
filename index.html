@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單管理</title>
+  <title>📦 訂單管理系統</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 24px; }
@@ -32,15 +32,11 @@
     }
     .groupHeader {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      gap: 10px;
+      margin-bottom: 8px;
     }
-    .groupTitle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .groupHeader h3 { margin: 0; }
 
     .orderContainer {
       display: flex;
@@ -51,8 +47,7 @@
     .orderCard {
       border: 1px solid #999;
       padding: 12px;
-      min-width: 240px;
-      max-width: 300px;
+      width: 300px;
       background: #f9f9f9;
     }
     .orderTitle {
@@ -63,11 +58,17 @@
       margin-bottom: 8px;
     }
 
-    .extraWrap {
+    .orderSelects {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .extraGrid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 8px;
-      margin-top: 10px;
+      gap: 6px;
     }
 
     .rowLine {
@@ -106,14 +107,15 @@ window.addEventListener("beforeunload", e => {
   e.preventDefault();
   e.returnValue = "";
 });
-  // 樣式標記所有預設選單
+  function markInvalid(el) {
+  const isSelect = el.tagName === "SELECT";
+  const empty = isSelect ? el.value === "" : !el.value.trim();
+  if (empty) el.classList.add("invalid");
+  else el.classList.remove("invalid");
+}
+
 function markInvalidAll() {
-  document.querySelectorAll("select, input[type='text'], input[type='datetime-local']").forEach(el => {
-    const isSelect = el.tagName === "SELECT";
-    if (isSelect && el.value === "") el.classList.add("invalid");
-    else if (!isSelect && el.placeholder && !el.value) el.classList.add("invalid");
-    else el.classList.remove("invalid");
-  });
+  document.querySelectorAll("select, input[type='text'], input[type='datetime-local']").forEach(markInvalid);
 }
 
 (async () => {
@@ -124,7 +126,6 @@ function markInvalidAll() {
   if (!token) {
     token = prompt("🔐 請輸入 GitHub Token");
     if (!token) return alert("❌ 無法繼續");
-
     localStorage.setItem(TAG, JSON.stringify({
       token: token.trim(),
       expires: now + 24 * 60 * 60 * 1000
@@ -138,50 +139,43 @@ function markInvalidAll() {
     const ivHex = CryptoJS.enc.Hex.parse(iv);
     const encrypted = CryptoJS.enc.Base64.parse(ciphertext);
     const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, {
-      iv: ivHex,
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7
+      iv: ivHex, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
     });
     const raw = decrypted.toString(CryptoJS.enc.Utf8);
     grid = JSON.parse(raw);
     document.getElementById("loader").style.display = "none";
-    addCustomerCard(); // 初始化
+    addCustomerCard(); // 初始一組
   } catch (err) {
-    document.getElementById("loader").textContent = "❌ 載入錯誤";
+    document.getElementById("loader").textContent = "❌ 載入失敗";
     console.error(err);
   }
 })();
 
-document.getElementById("addCustomerBtn").addEventListener("click", () => {
-  addCustomerCard();
-});
+document.getElementById("addCustomerBtn").addEventListener("click", () => addCustomerCard());
 
-// 🔧 建立客人主卡
+// 🔧 產生客人區塊
 function addCustomerCard() {
-  customerCount++;
   const container = document.getElementById("container");
-
   const card = document.createElement("div");
   card.className = "groupCard";
 
   const header = document.createElement("div");
   header.className = "groupHeader";
 
-  const left = document.createElement("div");
-  left.className = "groupTitle";
-  const delBtn = document.createElement("button");
-  delBtn.className = "btn del";
-  delBtn.textContent = "❌";
-  delBtn.onclick = () => {
-    if (confirm("確定刪除此客人？")) card.remove();
+  const del = document.createElement("button");
+  del.className = "btn del";
+  del.textContent = "❌";
+  del.onclick = () => {
+    if (confirm("確定刪除此客人？")) {
+      card.remove();
+      updateCustomerNumbers();
+    }
   };
-  left.appendChild(delBtn);
-  const title = document.createElement("h3");
-  title.textContent = `第 ${customerCount} 組客人`;
-  left.appendChild(title);
 
-  const right = document.createElement("select");
-  right.innerHTML = `
+  const title = document.createElement("h3");
+
+  const state = document.createElement("select");
+  state.innerHTML = `
     <option>已出貨</option>
     <option>已結待製</option>
     <option selected>未結待製</option>
@@ -189,158 +183,171 @@ function addCustomerCard() {
     <option>未結待取</option>
   `;
 
-  header.appendChild(left);
-  header.appendChild(right);
+  const time = document.createElement("span");
+
+  const left = document.createElement("div");
+  left.className = "groupHeader";
+  left.append(del, title);
+
+  header.append(left, state, time);
   card.appendChild(header);
-    const top = document.createElement("div");
-  top.className = "rowLine";
+    const row = document.createElement("div");
+  row.className = "rowLine";
+
   const source = document.createElement("select");
   source.innerHTML = `
     <option value="">顧客來源</option><option>到店</option><option>電話</option>
-    <option>LINE</option><option>FB</option><option>IG</option><option>簡訊</option><option>Ｕber Eats</option>
+    <option>LINE</option><option>FB</option><option>IG</option>
+    <option>簡訊</option><option>Ｕber Eats</option>
   `;
+
   const orderNo = document.createElement("input");
   orderNo.placeholder = "填入單號";
   orderNo.style.display = "none";
 
-  const time = document.createElement("span");
-
-  source.addEventListener("change", e => {
-    const v = source.value.trim();
-    orderNo.style.display = v === "Ｕber Eats" ? "inline-block" : "none";
-
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
-    const ss = String(now.getSeconds()).padStart(2, "0");
-    time.textContent = `選擇時間：${hh}:${mm}:${ss}`;
-    markInvalidAll();
-  });
-
   const payment = document.createElement("select");
   payment.innerHTML = `
-    <option value="">支付方式</option>
-    <option>現金</option><option>信用卡</option>
-    <option>LINE Pay</option><option>Apple Pay</option>
-    <option>Ｕber Eats</option>
+    <option value="">支付方式</option><option>現金</option><option>信用卡</option>
+    <option>LINE Pay</option><option>Apple Pay</option><option>Ｕber Eats</option>
   `;
 
   const delivery = document.createElement("input");
   delivery.placeholder = "外送資訊";
 
-  const points = document.createElement("select");
-  points.innerHTML = `<option value="">集點卡兌換</option>${[...Array(10)].map((_,i)=>`<option>${i+1}</option>`).join("")}`;
-
-  const pointText = document.createElement("input");
-  pointText.placeholder = "自訂兌換";
+  const points = document.createElement("input");
+  points.placeholder = "集點卡兌換數量";
 
   const adjust = document.createElement("input");
   adjust.placeholder = "金額調整";
 
   const boxChk = document.createElement("label");
-  boxChk.innerHTML = `<input type="checkbox" /> 自備容器`;
+  boxChk.innerHTML = `<input type="checkbox"> 自備容器`;
 
-  [source, orderNo, payment, delivery, points, pointText, adjust].forEach(el =>
+  source.addEventListener("change", e => {
+    const val = source.value.trim();
+    orderNo.style.display = val === "Ｕber Eats" ? "inline-block" : "none";
+
+    const match = [...payment.options].find(o => o.value === val);
+    if (match) payment.value = val;
+
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const ss = String(now.getSeconds()).padStart(2, "0");
+    time.textContent = `${hh}:${mm}:${ss}`;
+    markInvalidAll();
+  });
+
+  [source, orderNo, payment, delivery, points, adjust].forEach(el =>
     el.addEventListener("change", markInvalidAll)
   );
 
-  top.append(source, orderNo, payment, delivery, points, pointText, adjust, boxChk, time);
-  card.appendChild(top);
+  row.append(source, orderNo, payment, delivery, points, adjust, boxChk);
+  card.appendChild(row);
 
-  // 訂單區
   const orderBox = document.createElement("div");
   orderBox.className = "orderContainer";
   card.appendChild(orderBox);
 
   const addOrderBtn = document.createElement("button");
-  addOrderBtn.className = "btn add";
   addOrderBtn.textContent = "➕ 新增訂單";
-  addOrderBtn.onclick = () => addOrderBlock(orderBox);
+  addOrderBtn.className = "btn add";
+  addOrderBtn.onclick = () => {
+    addOrderBlock(orderBox);
+    updateOrderNumbers(orderBox);
+  };
   card.appendChild(addOrderBtn);
 
-  container.appendChild(card);
+  document.getElementById("container").appendChild(card);
   addOrderBlock(orderBox);
+  updateCustomerNumbers();
 }
   function addOrderBlock(wrapper) {
-  const idx = wrapper.children.length + 1;
-
   const card = document.createElement("div");
   card.className = "orderCard";
 
   const title = document.createElement("div");
   title.className = "orderTitle";
-  title.innerHTML = `<span>第 ${idx} 組訂單</span>`;
+  const label = document.createElement("span");
+  label.textContent = "第 X 組訂單"; // 先填上 X，稍後由 updateOrderNumbers 更新
   const del = document.createElement("button");
   del.textContent = "❌";
   del.className = "btn del";
   del.onclick = () => {
-    if (confirm("刪除這筆訂單？")) card.remove();
+    if (confirm("刪除這筆訂單？")) {
+      card.remove();
+      updateOrderNumbers(wrapper);
+    }
   };
-  title.appendChild(del);
+  title.append(label, del);
   card.appendChild(title);
 
-  const selectA = document.createElement("select");
-  selectA.innerHTML = `<option value="">請選擇 A</option>`;
+  const a = document.createElement("select");
+  a.innerHTML = `<option value="">請選擇 A</option>`;
   new Set(grid.slice(10,106).map(r=>r?.[0]).filter(Boolean)).forEach(v => {
     const o = document.createElement("option");
-    o.textContent = o.value = v;
-    selectA.appendChild(o);
+    o.value = o.textContent = v;
+    a.appendChild(o);
   });
 
-  const selectB1 = document.createElement("select");
-  selectB1.innerHTML = `<option value="">請選擇 B</option>`;
+  const b1 = document.createElement("select");
+  b1.innerHTML = `<option value="">請選擇 B</option>`;
 
-  const selectB2 = document.createElement("select");
-  selectB2.style.display = "none";
+  const b2 = document.createElement("select");
+  b2.innerHTML = `<option value="">請選擇 C</option>`;
+  b2.style.display = "none";
 
   const rowA = document.createElement("div");
-  rowA.className = "rowLine";
-  rowA.append(selectA, selectB1, selectB2);
+  rowA.className = "orderSelects";
+  const firstRow = document.createElement("div");
+  firstRow.className = "rowLine";
+  firstRow.appendChild(a);
+  const secondRow = document.createElement("div");
+  secondRow.className = "rowLine";
+  secondRow.append(b1, b2);
+  const thirdRow = document.createElement("div");
+  thirdRow.className = "extraGrid";
+
+  rowA.append(firstRow, secondRow, thirdRow);
   card.appendChild(rowA);
 
-  const extra = document.createElement("div");
-  extra.className = "extraWrap";
-  card.appendChild(extra);
-
-  // 💡 A 選擇後 → 動態產生 B1 / B2
-  selectA.addEventListener("change", () => {
-    const val = selectA.value.trim();
+  a.addEventListener("change", () => {
+    const val = a.value.trim();
     const matched = grid.filter(r => r?.[0]?.trim() === val);
     const bSet = new Set(matched.map(r => r?.[1]).filter(Boolean));
     const cSet = new Set(matched.map(r => r?.[2]).filter(Boolean));
 
-    selectB1.innerHTML = `<option value="">請選擇 B</option>`;
+    b1.innerHTML = `<option value="">請選擇 B</option>`;
     [...bSet].forEach(v => {
       const o = document.createElement("option");
-      o.textContent = o.value = v;
-      selectB1.appendChild(o);
+      o.value = o.textContent = v;
+      b1.appendChild(o);
     });
 
     if (val === "雞蛋糕") {
-      selectB2.style.display = "inline-block";
-      selectB2.innerHTML = `<option value="">請選擇 C</option>`;
+      b2.style.display = "inline-block";
+      b2.innerHTML = `<option value="">請選擇 C</option>`;
       [...cSet].forEach(v => {
         const o = document.createElement("option");
-        o.textContent = o.value = v;
-        selectB2.appendChild(o);
+        o.value = o.textContent = v;
+        b2.appendChild(o);
       });
     } else {
-      selectB2.style.display = "none";
+      b2.style.display = "none";
     }
 
-    extra.innerHTML = "";
+    thirdRow.innerHTML = "";
     markInvalidAll();
   });
 
-  // 💡 B1 選擇後 → 找對應列建立附1~附10
-  selectB1.addEventListener("change", () => {
-    const aVal = selectA.value.trim();
-    const bVal = selectB1.value.trim();
-    const row = grid.find(r => r?.[0]?.trim() === aVal && r?.[1]?.trim() === bVal);
+  b1.addEventListener("change", () => {
+    const valA = a.value.trim();
+    const valB = b1.value.trim();
+    const row = grid.find(r => r?.[0]?.trim() === valA && r?.[1]?.trim() === valB);
     if (!row) return;
 
     const opts = row.slice(5,15).map(v => v?.trim()).filter(Boolean);
-    extra.innerHTML = "";
+    thirdRow.innerHTML = "";
 
     for (let i = 1; i <= 10; i++) {
       const sel = document.createElement("select");
@@ -351,19 +358,36 @@ function addCustomerCard() {
         sel.appendChild(o);
       });
       sel.addEventListener("change", markInvalidAll);
-      extra.appendChild(sel);
+      thirdRow.appendChild(sel);
     }
 
     markInvalidAll();
   });
 
-  [selectA, selectB1, selectB2].forEach(s => s.addEventListener("change", markInvalidAll));
+  [a, b1, b2].forEach(sel => sel.addEventListener("change", markInvalidAll));
   wrapper.appendChild(card);
+  updateOrderNumbers(wrapper);
 }
 
-// 🔓 登出邏輯
+// 🔁 更新客人組編號
+function updateCustomerNumbers() {
+  document.querySelectorAll(".groupCard").forEach((g, i) => {
+    const h3 = g.querySelector("h3");
+    h3.textContent = `第 ${i + 1} 組客人`;
+  });
+}
+
+// 🔁 更新訂單編號
+function updateOrderNumbers(wrap) {
+  wrap.querySelectorAll(".orderCard").forEach((el, i) => {
+    const label = el.querySelector(".orderTitle span");
+    if (label) label.textContent = `第 ${i + 1} 組訂單`;
+  });
+}
+
+// 🔓 登出
 document.getElementById("logoutBtn").addEventListener("click", () => {
-  if (confirm("是否登出並清除金鑰？")) {
+  if (confirm("是否登出？")) {
     localStorage.removeItem(TAG);
     location.reload();
   }
