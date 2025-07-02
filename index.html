@@ -207,8 +207,7 @@ const markInvalidSelects = (wrap) => {
   wrapper.appendChild(extraWrap);
 
   parentDiv.appendChild(wrapper);
-
-  const updateExtras = (row) => {
+      const updateExtras = (row) => {
     const options = row.slice(5,15).map(v=>v?.trim()).filter(Boolean);
     extraWrap.innerHTML = "";
     for (let i = 1; i <= 10; i++) {
@@ -259,3 +258,14 @@ const markInvalidSelects = (wrap) => {
     if (row) updateExtras(row);
   });
 }
+
+// 🔓 登出按鈕
+document.getElementById("logoutBtn").addEventListener("click", () => {
+  if (confirm("是否登出並清除金鑰？")) {
+    localStorage.removeItem(TAG);
+    location.reload();
+  }
+});
+</script>
+</body>
+</html>
