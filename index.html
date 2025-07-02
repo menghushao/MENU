@@ -2,101 +2,68 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>Order-management 下拉選單測試</title>
+  <title>A11~A106 下拉選單</title>
+  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    #controls { margin-bottom: 10px; }
-    select, button { padding: 6px 10px; margin-right: 10px; }
-
-    table { border-collapse: collapse; margin-top: 10px; }
-    th, td {
-      border: 1px solid #ccc;
-      min-width: 60px;
-      height: 24px;
-      text-align: center;
-    }
-    th { background: #eee; position: sticky; top: 0; z-index: 2; }
-    th:first-child, td:first-child {
-      position: sticky;
-      left: 0;
-      background: #f3f3f3;
-      z-index: 1;
-    }
-    td:focus { outline: 2px solid #0078D7; }
+    body { font-family: sans-serif; padding: 30px; }
+    select { padding: 6px 12px; font-size: 16px; }
+    label { font-weight: bold; margin-right: 10px; }
+    #loader { color: gray; margin-top: 10px; }
   </style>
 </head>
 <body>
 
-<h2>Order-management 測試頁</h2>
-
-<div id="controls">
-  <label for="dropdownFromA11toA105">🔽 A11 ~ A105 下拉選單：</label>
-  <select id="dropdownFromA11toA105">
-    <option value="">請選擇</option>
-  </select>
-  <button onclick="updateDropdownFromA11toA105()">🔄 重新擷取</button>
-</div>
-
-<table id="grid">
-  <thead>
-    <tr id="theadRow"><th></th></tr>
-  </thead>
-  <tbody id="tbody"></tbody>
-</table>
+<h2>📋 A11 ~ A106 資料下拉選單</h2>
+<label for="dropdown">選項：</label>
+<select id="dropdown">
+  <option value="">請等待資料讀取中...</option>
+</select>
+<div id="loader">🔐 正在抓取並解密資料...</div>
 
 <script>
-const ROWS = 106, COLS = 50;
-const theadRow = document.getElementById('theadRow');
-const tbody = document.getElementById('tbody');
-
-// 建立表頭（A ~ AX）
-for (let c = 0; c < COLS; c++) {
-  let label = '', n = c;
-  while (n >= 0) {
-    label = String.fromCharCode(n % 26 + 65) + label;
-    n = Math.floor(n / 26) - 1;
-  }
-  const th = document.createElement('th');
-  th.textContent = label;
-  theadRow.appendChild(th);
-}
-
-// 建立表格內容
-for (let r = 0; r < ROWS; r++) {
-  const tr = document.createElement('tr');
-  const rowTh = document.createElement('th');
-  rowTh.textContent = r + 1;
-  tr.appendChild(rowTh);
-
-  for (let c = 0; c < COLS; c++) {
-    const td = document.createElement('td');
-    td.contentEditable = true;
-    tr.appendChild(td);
-  }
-  tbody.appendChild(tr);
-}
-
-// 擷取 A11~A105 → 下拉選單
-function updateDropdownFromA11toA105() {
-  const select = document.getElementById("dropdownFromA11toA105");
-  const values = new Set();
-
-  for (let r = 10; r <= 104; r++) {
-    const cell = tbody.rows[r]?.cells[1]; // A 欄 = cellIndex 1
-    const val = cell?.textContent.trim();
-    if (val) values.add(val);
+(async () => {
+  const TOKEN = prompt("🔐 請輸入 GitHub Token");
+  if (!TOKEN) {
+    alert("❌ 未輸入，無法繼續");
+    return;
   }
 
-  select.innerHTML = '<option value="">請選擇</option>';
-  Array.from(values).forEach(v => {
-    const option = document.createElement('option');
-    option.value = option.textContent = v;
-    select.appendChild(option);
-  });
-}
+  const key = CryptoJS.enc.Utf8.parse(TOKEN.trim().slice(0, 32).padEnd(32, '0'));
+  const url = "https://raw.githubusercontent.com/menghushao/Order-management-product/main/gridData.json";
+  const dropdown = document.getElementById("dropdown");
+  const loader = document.getElementById("loader");
 
-// 頁面載入完成後自動執行
-window.addEventListener("load", updateDropdownFromA11toA105);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("資料載入失敗");
+    const json = await res.json();
+
+    const iv = CryptoJS.enc.Hex.parse(json.iv);
+    const encrypted = CryptoJS.enc.Base64.parse(json.ciphertext);
+    const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
+    const raw = decrypted.toString(CryptoJS.enc.Utf8);
+    const grid = JSON.parse(raw);
+
+    const values = new Set();
+    for (let r = 10; r <= 105; r++) {
+      const val = grid[r]?.[0];
+      if (val?.trim()) values.add(val.trim());
+    }
+
+    dropdown.innerHTML = '<option value="">請選擇</option>';
+    [...values].forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = opt.textContent = v;
+      dropdown.appendChild(opt);
+    });
+
+    loader.textContent = `✅ 載入完成，共 ${values.size} 個選項`;
+  } catch (err) {
+    console.error(err);
+    loader.textContent = "❌ 解密或載入失敗，請確認金鑰與資料是否正確";
+    dropdown.innerHTML = '<option value="">讀取失敗</option>';
+  }
+})();
 </script>
 
 </body>
