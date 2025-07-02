@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>Excel Grid 106×50</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    table { border-collapse: collapse; }
+    th, td {
+      border: 1px solid #ccc;
+      min-width: 60px;
+      height: 24px;
+      text-align: center;
+    }
+    th { background: #eee; position: sticky; top: 0; z-index: 2; }
+    th:first-child, td:first-child {
+      position: sticky;
+      left: 0;
+      background: #f3f3f3;
+      z-index: 1;
+    }
+    td:focus { outline: 2px solid #0078D7; }
+    button { margin: 10px 0; padding: 8px 16px; }
+
+    /* ✅ 高亮樣式 */
+    td.hover-col, th.hover-col { background-color: #e0f3ff !important; }
+    td.hover-row, th.hover-row { background-color: #fff4cc !important; }
+  </style>
+</head>
+<body>
+
+<h3>表格資料庫（106 × 50）</h3>
+<button onclick="save()">💾 儲存（覆蓋 index.html）</button>
+<table id="grid">
+  <thead><tr id="theadRow"><th></th></tr></thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<!-- 🔰 gridData 先定義好（會被覆蓋） -->
+<script>
+const gridData = Array.from({ length: 106 }, () => Array(50).fill(""));
+// @@gridData@@
+</script>
+
+<script>
+const ROWS = 106, COLS = 50;
+const user = 'menghushao';
+const repo = 'Order-management';
+const path = 'index.html';
+const branch = 'main';
+
+const theadRow = document.getElementById('theadRow');
+const tbody = document.getElementById('tbody');
+
+// 建立表頭
+for (let c = 0; c < COLS; c++) {
+  let label = '', n = c;
+  while (n >= 0) {
+    label = String.fromCharCode(n % 26 + 65) + label;
+    n = Math.floor(n / 26) - 1;
+  }
+  const th = document.createElement('th');
+  th.textContent = label;
+  theadRow.appendChild(th);
+}
+
+// 建立表格
+for (let r = 0; r < ROWS; r++) {
+  const tr = document.createElement('tr');
+  const rowTh = document.createElement('th');
+  rowTh.textContent = r + 1;
+  tr.appendChild(rowTh);
+  for (let c = 0; c < COLS; c++) {
+    const td = document.createElement('td');
+    td.contentEditable = true;
+    tr.appendChild(td);
+  }
+  tbody.appendChild(tr);
+}
+
+// 填入 gridData 資料
+for (let r = 0; r < ROWS; r++) {
+  for (let c = 0; c < COLS; c++) {
+    const val = (gridData[r] && gridData[r][c]) || "";
+    tbody.rows[r].cells[c + 1].textContent = val;
+  }
+}
+
+// ✅ 十字高亮功能
+tbody.addEventListener('mouseover', e => {
+  if (e.target.tagName !== 'TD') return;
+  const td = e.target;
+  clearHighlight();
+
+  const tr = td.parentElement;
+  const rowIndex = tr.rowIndex - 1;
+  const colIndex = td.cellIndex;
+
+  for (let r = 0; r < ROWS; r++) {
+    const cell = tbody.rows[r].cells[colIndex];
+    if (cell) cell.classList.add('hover-col');
+  }
+
+  [...tr.children].forEach(cell => cell.classList.add('hover-row'));
+
+  theadRow.cells[colIndex].classList.add('hover-col');
+  tbody.rows[rowIndex].cells[0].classList.add('hover-row');
+});
+
+tbody.addEventListener('mouseout', clearHighlight);
+function clearHighlight() {
+  document.querySelectorAll('.hover-col, .hover-row').forEach(el =>
+    el.classList.remove('hover-col', 'hover-row')
+  );
+}
+
+// ✅ 離開前提示（F5、返回上一頁、關閉分頁皆會觸發）
+window.addEventListener("beforeunload", function (e) {
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+async function save() {
+  const token = prompt("請輸入 GitHub Token");
+  if (!token) return;
+
+  const values = Array.from({ length: ROWS }, (_, r) =>
+    Array.from({ length: COLS }, (_, c) =>
+      (tbody.rows[r]?.cells[c + 1]?.textContent || "").trim()
+    )
+  );
+
+  const updatedCode = `const gridData = ${JSON.stringify(values)};\n// @@gridData@@`;
+  const sourceURL = `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path}`;
+  const original = await fetch(sourceURL).then(r => r.text());
+  const replaced = original.replace(
+    /const gridData = .*?\/\/ @@gridData@@/s,
+    updatedCode
+  );
+  const base64 = btoa(unescape(encodeURIComponent(replaced)));
+
+  const metaURL = `https://api.github.com/repos/${user}/${repo}/contents/${path}?ref=${branch}`;
+  const { sha } = await fetch(metaURL, {
+    headers: { Authorization: `Bearer ${token}` }
+  }).then(r => r.json());
+
+  const upload = await fetch(metaURL.replace('?ref=' + branch, ''), {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      message: '📦 更新 gridData 並保留功能碼',
+      content: base64,
+      sha,
+      branch
+    })
+  });
+
+  if (upload.ok) {
+    alert('✅ 儲存成功，下次打開就是新資料');
+  } else {
+    const err = await upload.text();
+    alert('❌ 儲存失敗：' + err);
+  }
+}
+</script>
+
+</body>
+</html>
