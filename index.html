@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.4</title>
+  <title>📦 多客人訂單系統 V1.9.5</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -119,7 +119,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.4</h2>
+  <h2>📋 多客人訂單系統 V1.9.5</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -384,8 +384,7 @@ function updateOrderNumbers(wrap) {
       const extras = [...order.querySelectorAll(".extraGrid select")].map(s => s.value.trim()).filter(Boolean);
       const extText = extras.length ? `(${extras.join("+")})` : "";
       const label = short + extText;
-      const key = `${a}|${short}|${extText}`;
-            const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
+      const key = `${a}|${short}|${extText}`;      const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
       const dCodes = rows.map(r => r?.[3]).filter(Boolean);
       const matchedCode = dCodes.find(code => grid.slice(1, 9).some(r => r[0] === code));
       const matchedRow = matchedCode ? grid.find(r => r[0] === matchedCode) : null;
