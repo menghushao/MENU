@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.6</title>
+  <title>📦 多客人訂單系統 V1.9.7</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -117,9 +117,8 @@
   </style>
 </head>
 <body>
-
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.6</h2>
+  <h2>📋 多客人訂單系統 V1.9.7</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -135,7 +134,8 @@ window.addEventListener("beforeunload", e => {
   e.preventDefault();
   e.returnValue = "你確定要離開？資料將會遺失";
 });
-  function markInvalid(el) {
+
+function markInvalid(el) {
   const isSelect = el.tagName === "SELECT";
   const empty = isSelect ? el.value === "" : !el.value.trim();
   el.classList.toggle("invalid", empty);
@@ -352,7 +352,7 @@ function addCustomerCard() {
   updateCustomerNumbers();
   triggerSummaryUpdate(card);
 }
- function triggerSummaryUpdate(group) {
+function triggerSummaryUpdate(group) {
   const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
   const pickup = group.querySelector("input[type='datetime-local']")?.value;
   const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
@@ -371,16 +371,14 @@ function addCustomerCard() {
     };
   }
 
-  const itemMap = {}, countMap = {};
-  let total = 0, count = 0;
-
-  orders.forEach(order => {
+  const tagMap = {}, normal = [];
+  for (const order of orders) {
     const sel = order.querySelectorAll("select");
     const a = sel[0]?.value.trim();
     let b1 = sel[1]?.value.trim();
     let b2 = sel[2]?.style.display !== "none" ? sel[2]?.value.trim() : "";
     const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
-    if (!a || (!b1 && !b2)) return;
+    if (!a || (!b1 && !b2)) continue;
 
     if (a === "雞蛋糕") {
       if (!b1 && b2) b1 = b2;
@@ -388,46 +386,88 @@ function addCustomerCard() {
     }
 
     const parts = [b1, b2].filter(Boolean).sort();
-    const short = parts.map(p => {
+    const dVals = parts.map(p => {
       const row = grid.find(r => r[0] === a && r[1] === p);
+      return row?.[3];
+    }).filter(Boolean);
+
+    const matchedCode = dVals.find(code => dealMap[code] && dealMap[code].methods.includes(pay));
+    if (matchedCode) {
+      if (!tagMap[matchedCode]) tagMap[matchedCode] = [];
+      tagMap[matchedCode].push({ a, parts, qty });
+    } else {
+      normal.push({ a, parts, qty });
+    }
+  }
+
+  const countMap = {}, itemMap = {};
+  let total = 0, count = 0;
+
+  for (const code in tagMap) {
+    const deal = dealMap[code];
+    const items = tagMap[code];
+    const totalQty = items.reduce((sum, i) => sum + i.qty, 0);
+    const groupCount = Math.floor(totalQty / deal.qty);
+    const remainCount = totalQty % deal.qty;
+    total += groupCount * deal.price;
+
+    let remain = remainCount;
+    for (const item of items) {
+      const short = item.parts.map(p => {
+        const row = grid.find(r => r[0] === item.a && r[1] === p);
+        return row?.[2] || p;
+      }).join("+");
+      const key = `${item.a}|${short}|`;
+      const use = Math.min(item.qty, remain);
+      const leftover = item.qty - use;
+
+      if (leftover > 0) {
+        const prices = item.parts.map(p => {
+          const row = grid.find(r => r[0] === item.a && r[1] === p);
+          return parseFloat(row?.[payCol]) || 0;
+        });
+        const unitPrice = prices.reduce((a, b) => a + b, 0);
+        total += unitPrice * leftover;
+      }
+
+      remain -= use;
+
+      if (!itemMap[key]) {
+        itemMap[key] = { label: short, qty: item.qty, total: item.a === "雞蛋糕" ? item.qty * 2 : item.qty };
+      } else {
+        itemMap[key].qty += item.qty;
+        itemMap[key].total += item.a === "雞蛋糕" ? item.qty * 2 : item.qty;
+      }
+
+      if (item.a !== "包裝") count += item.qty;
+      countMap[item.a] = (countMap[item.a] || 0) + item.qty;
+    }
+  }
+
+  for (const item of normal) {
+    const short = item.parts.map(p => {
+      const row = grid.find(r => r[0] === item.a && r[1] === p);
       return row?.[2] || p;
     }).join("+");
+    const key = `${item.a}|${short}|`;
 
-    const extras = [...order.querySelectorAll(".extraGrid select")].map(s => s.value.trim()).filter(Boolean);
-    const extText = extras.length ? `(${extras.join("+")})` : "";
-    const label = short + extText;
-    const key = `${a}|${short}|${extText}`;
-
-    const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
-    const dCodes = rows.map(r => r?.[3]).filter(Boolean);
-    const matchedCode = dCodes.find(code => grid.slice(1, 9).some(r => r[0] === code));
-    const matchedRow = matchedCode ? grid.find(r => r[0] === matchedCode) : null;
-    const deal = matchedRow && dealMap[matchedCode];
-    const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
+    const prices = item.parts.map(p => {
+      const row = grid.find(r => r[0] === item.a && r[1] === p);
+      return parseFloat(row?.[payCol]) || 0;
+    });
     const unitPrice = prices.reduce((a, b) => a + b, 0);
-
-    let subtotal = 0;
-    if (a !== "雞蛋糕" && deal && deal.methods.includes(pay)) {
-      const { qty: dealQty, price: dealPrice } = deal;
-      const full = Math.floor(qty / dealQty);
-      const rest = qty % dealQty;
-      const std = prices[0] || 0;
-      subtotal = full * dealPrice + rest * std;
-    } else {
-      subtotal = unitPrice * qty;
-    }
-
-    total += subtotal;
-    if (a !== "包裝") count += qty;
-    countMap[a] = (countMap[a] || 0) + qty;
+    total += unitPrice * item.qty;
 
     if (!itemMap[key]) {
-      itemMap[key] = { label, qty, total: a === "雞蛋糕" ? qty * 2 : qty };
+      itemMap[key] = { label: short, qty: item.qty, total: item.a === "雞蛋糕" ? item.qty * 2 : item.qty };
     } else {
-      itemMap[key].qty += qty;
-      itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
+      itemMap[key].qty += item.qty;
+      itemMap[key].total += item.a === "雞蛋糕" ? item.qty * 2 : item.qty;
     }
-  });
+
+    if (item.a !== "包裝") count += item.qty;
+    countMap[item.a] = (countMap[item.a] || 0) + item.qty;
+  }
 
   const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
   const items = Object.entries(itemMap).sort((a, b) => {
@@ -448,135 +488,6 @@ function addCustomerCard() {
   }
   const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
   summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
-}
-
-function addOrderBlock(wrapper) {
-  const card = document.createElement("div");
-  card.className = "orderCard";
-
-  const title = document.createElement("div");
-  title.className = "orderTitle";
-  const label = document.createElement("span");
-  label.textContent = "第 X 組訂單";
-  const del = document.createElement("button");
-  del.textContent = "❌";
-  del.className = "btn del";
-  del.onclick = () => {
-    if (confirm("刪除此訂單？")) {
-      card.remove();
-      updateOrderNumbers(wrapper);
-      const group = card.closest(".groupCard");
-      if (group) triggerSummaryUpdate(group);
-    }
-  };
-  title.append(label, del);
-  card.appendChild(title);
-
-  const rowTop = document.createElement("div");
-  rowTop.className = "rowLine";
-
-  const a = document.createElement("select");
-  a.innerHTML = `<option value="">請選擇 A</option>`;
-  new Set(grid.slice(10, 106).map(r => r?.[0]).filter(Boolean)).forEach(v => {
-    const o = document.createElement("option");
-    o.value = o.textContent = v;
-    a.appendChild(o);
-  });
-  markInvalid(a);
-
-  const qty = document.createElement("input");
-  qty.type = "number";
-  qty.min = "1";
-  qty.value = "1";
-  qty.style.width = "60px";
-  markInvalid(qty);
-
-  rowTop.append(a, qty);
-  card.appendChild(rowTop);
-
-  const rowMid = document.createElement("div");
-  rowMid.className = "rowLine";
-
-  const b1 = document.createElement("select");
-  b1.innerHTML = `<option value="">請選擇 B</option>`;
-  markInvalid(b1);
-
-  const b2 = document.createElement("select");
-  b2.innerHTML = `<option value="">請選擇 C</option>`;
-  b2.style.display = "none";
-  markInvalid(b2);
-
-  rowMid.append(b1, b2);
-  card.appendChild(rowMid);
-
-  const extraRow = document.createElement("div");
-  extraRow.className = "extraGrid";
-  card.appendChild(extraRow);
-
-  const update = () => {
-    markInvalidAll();
-    const group = card.closest(".groupCard");
-    if (group) triggerSummaryUpdate(group);
-  };
-
-  a.addEventListener("change", () => {
-    const val = a.value.trim();
-    const matched = grid.filter(r => r?.[0]?.trim() === val);
-    const bSet = new Set(matched.map(r => r?.[1]).filter(Boolean));
-
-    b1.innerHTML = `<option value="">請選擇 B</option>`;
-    [...bSet].forEach(v => {
-      const o = document.createElement("option");
-      o.value = o.textContent = v;
-      b1.appendChild(o);
-    });
-
-    if (val === "雞蛋糕") {
-      b2.style.display = "inline-block";
-      b2.innerHTML = `<option value="">請選擇 C</option>`;
-      [...bSet].forEach(v => {
-        const o = document.createElement("option");
-        o.value = o.textContent = v;
-        b2.appendChild(o);
-      });
-    } else {
-      b2.style.display = "none";
-    }
-
-        extraRow.innerHTML = "";
-    update();
-  });
-
-  b1.addEventListener("change", () => {
-    const valA = a.value.trim();
-    const valB = b1.value.trim();
-    const row = grid.find(r => r?.[0]?.trim() === valA && r?.[1]?.trim() === valB);
-    if (!row) return;
-
-    const opts = row.slice(5, 15).map(v => v?.trim()).filter(Boolean);
-    extraRow.innerHTML = "";
-
-    for (let i = 1; i <= 8; i++) {
-      const sel = document.createElement("select");
-      sel.innerHTML = `<option value="">附${i}</option>`;
-      opts.forEach(v => {
-        const o = document.createElement("option");
-        o.textContent = o.value = v;
-        sel.appendChild(o);
-      });
-      sel.addEventListener("change", update);
-      markInvalid(sel);
-      extraRow.appendChild(sel);
-    }
-
-    update();
-  });
-
-  [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
-
-  wrapper.appendChild(card);
-  updateOrderNumbers(wrapper);
-  update();
 }
 </script>
 </body>
