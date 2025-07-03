@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.5</title>
+  <title>📦 多客人訂單系統 V1.9.6</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -119,7 +119,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.5</h2>
+  <h2>📋 多客人訂單系統 V1.9.6</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -152,7 +152,10 @@ function markInvalidAll() {
 
   if (!token) {
     token = prompt("🔐 請輸入 GitHub Token");
-    if (!token) return alert("❌ 無法繼續");
+    if (!token) {
+      document.getElementById("loader").textContent = "❌ 未輸入 Token，無法載入資料";
+      return;
+    }
     localStorage.setItem(TAG, JSON.stringify({
       token: token.trim(),
       expires: now + 24 * 60 * 60 * 1000
@@ -160,24 +163,34 @@ function markInvalidAll() {
   }
 
   const key = CryptoJS.enc.Utf8.parse(token.slice(0, 32).padEnd(32, '0'));
+
   try {
     const res = await fetch("https://raw.githubusercontent.com/menghushao/Order-management-product/main/gridData.json");
     const { ciphertext, iv } = await res.json();
+
+    if (!ciphertext || !iv) throw new Error("資料格式錯誤");
+
     const ivHex = CryptoJS.enc.Hex.parse(iv);
     const encrypted = CryptoJS.enc.Base64.parse(ciphertext);
     const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, {
-      iv: ivHex, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
+      iv: ivHex,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7
     });
-    grid = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
+
+    const jsonText = decrypted.toString(CryptoJS.enc.Utf8);
+    grid = JSON.parse(jsonText);
+
+    if (!Array.isArray(grid) || grid.length < 10) throw new Error("資料解密結果異常");
+
     document.getElementById("loader").style.display = "none";
     addCustomerCard();
   } catch (err) {
-    document.getElementById("loader").textContent = "❌ 載入失敗";
-    console.error(err);
+    console.error("❌ 載入失敗", err);
+    document.getElementById("loader").textContent = "❌ 資料讀取失敗，請檢查 Token 或檔案內容";
   }
 })();
-
-document.getElementById("addCustomerBtn").addEventListener("click", () => {
+  document.getElementById("addCustomerBtn").addEventListener("click", () => {
   addCustomerCard();
 });
 
@@ -201,7 +214,8 @@ function updateOrderNumbers(wrap) {
     if (label) label.textContent = `第 ${i + 1} 組訂單`;
   });
 }
-  function addCustomerCard() {
+
+function addCustomerCard() {
   const container = document.getElementById("container");
   const card = document.createElement("div");
   card.className = "groupCard";
@@ -273,8 +287,7 @@ function updateOrderNumbers(wrap) {
     }
   });
   markInvalid(payment);
-
-  const pickupTime = document.createElement("input");
+    const pickupTime = document.createElement("input");
   pickupTime.type = "datetime-local";
   pickupTime.placeholder = "取餐時間";
   markInvalid(pickupTime);
@@ -317,7 +330,8 @@ function updateOrderNumbers(wrap) {
 
     refresh();
   });
-      row.append(source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk);
+
+  row.append(source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk);
   card.appendChild(row);
 
   const orderBox = document.createElement("div");
@@ -339,102 +353,30 @@ function updateOrderNumbers(wrap) {
   updateOrderNumbers(orderBox);
   updateCustomerNumbers();
   triggerSummaryUpdate(card);
+}
+ function triggerSummaryUpdate(group) {
+  // ...（前段略，已貼於前一段）
 
-  function triggerSummaryUpdate(group) {
-    const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
-    const pickup = group.querySelector("input[type='datetime-local']")?.value;
-    const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
-    const summary = group.querySelector(".summaryText");
-    const orders = [...group.querySelectorAll(".orderCard")];
-    const payCol = grid[6].findIndex(v => v === pay);
+  const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
+  const items = Object.entries(itemMap).sort((a, b) => {
+    const na = a[0].split("|")[0], nb = b[0].split("|")[0];
+    return (seq[na] ?? 99) - (seq[nb] ?? 99);
+  });
 
-    const dealMap = {};
-    for (let i = 2; i <= 9; i++) {
-      const code = grid[i][0];
-      if (!code) continue;
-      dealMap[code] = {
-        qty: parseInt(grid[i][1]),
-        price: parseInt(grid[i][2]),
-        methods: (grid[i][3] || "").split("、")
-      };
+  const line1 = Object.entries(seq).filter(([k]) => countMap[k]).map(([k]) => `${k}${countMap[k]}份`).join("；") + `，共 ${count} 份`;
+  const line2 = [`共 ${total} 元`];
+  if (delivery) line2.push(delivery);
+  if (pickup) {
+    const dt = new Date(pickup);
+    if (!isNaN(dt)) {
+      const y = dt.getFullYear(), m = dt.getMonth() + 1, d = dt.getDate();
+      const h = dt.getHours(), mi = String(dt.getMinutes()).padStart(2, "0");
+      line2.push(`${delivery ? "送達" : "取餐"}時間 ${y}/${m}/${d}/${h}:${mi}`);
     }
-
-    const itemMap = {}, countMap = {};
-    let total = 0, count = 0;
-
-    orders.forEach(order => {
-      const sel = order.querySelectorAll("select");
-      const a = sel[0]?.value.trim();
-      let b1 = sel[1]?.value.trim();
-      let b2 = sel[2]?.style.display !== "none" ? sel[2]?.value.trim() : "";
-      const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
-      if (!a || (!b1 && !b2)) return;
-
-      if (a === "雞蛋糕") {
-        if (!b1 && b2) b1 = b2;
-        if (!b2 && b1) b2 = b1;
-      }
-
-      const parts = [b1, b2].filter(Boolean).sort();
-      const short = parts.map(p => {
-        const row = grid.find(r => r[0] === a && r[1] === p);
-        return row?.[2] || p;
-      }).join("+");
-
-      const extras = [...order.querySelectorAll(".extraGrid select")].map(s => s.value.trim()).filter(Boolean);
-      const extText = extras.length ? `(${extras.join("+")})` : "";
-      const label = short + extText;
-      const key = `${a}|${short}|${extText}`;      const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
-      const dCodes = rows.map(r => r?.[3]).filter(Boolean);
-      const matchedCode = dCodes.find(code => grid.slice(1, 9).some(r => r[0] === code));
-      const matchedRow = matchedCode ? grid.find(r => r[0] === matchedCode) : null;
-      const deal = matchedRow && dealMap[matchedCode];
-      const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
-      const unitPrice = prices.reduce((a, b) => a + b, 0);
-
-      let subtotal = 0;
-      if (a !== "雞蛋糕" && deal && deal.methods.includes(pay)) {
-        const { qty: dealQty, price: dealPrice } = deal;
-        const full = Math.floor(qty / dealQty);
-        const rest = qty % dealQty;
-        const std = prices[0] || 0;
-        subtotal = full * dealPrice + rest * std;
-      } else {
-        subtotal = unitPrice * qty;
-      }
-
-      total += subtotal;
-      if (a !== "包裝") count += qty;
-      countMap[a] = (countMap[a] || 0) + qty;
-
-      if (!itemMap[key]) {
-        itemMap[key] = { label, qty, total: a === "雞蛋糕" ? qty * 2 : qty };
-      } else {
-        itemMap[key].qty += qty;
-        itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
-      }
-    });
-
-    const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
-    const items = Object.entries(itemMap).sort((a, b) => {
-      const na = a[0].split("|")[0], nb = b[0].split("|")[0];
-      return (seq[na] ?? 99) - (seq[nb] ?? 99);
-    });
-
-    const line1 = Object.entries(seq).filter(([k]) => countMap[k]).map(([k]) => `${k}${countMap[k]}份`).join("；") + `，共 ${count} 份`;
-    const line2 = [`共 ${total} 元`];
-    if (delivery) line2.push(delivery);
-    if (pickup) {
-      const dt = new Date(pickup);
-      if (!isNaN(dt)) {
-        const y = dt.getFullYear(), m = dt.getMonth() + 1, d = dt.getDate();
-        const h = dt.getHours(), mi = String(dt.getMinutes()).padStart(2, "0");
-        line2.push(`${delivery ? "送達" : "取餐"}時間 ${y}/${m}/${d}/${h}:${mi}`);
-      }
-    }
-    const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
-    summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
   }
+  const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
+  summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
+}
 
 function addOrderBlock(wrapper) {
   const card = document.createElement("div");
@@ -566,4 +508,4 @@ function addOrderBlock(wrapper) {
 }
 </script>
 </body>
-</html>
+</html> 
