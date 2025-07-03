@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.3</title>
+  <title>📦 多客人訂單系統 V1.9.4</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -119,7 +119,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.3</h2>
+  <h2>📋 多客人訂單系統 V1.9.4</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -385,8 +385,7 @@ function updateOrderNumbers(wrap) {
       const extText = extras.length ? `(${extras.join("+")})` : "";
       const label = short + extText;
       const key = `${a}|${short}|${extText}`;
-
-      const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
+            const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
       const dCodes = rows.map(r => r?.[3]).filter(Boolean);
       const matchedCode = dCodes.find(code => grid.slice(1, 9).some(r => r[0] === code));
       const matchedRow = matchedCode ? grid.find(r => r[0] === matchedCode) : null;
@@ -437,7 +436,7 @@ function updateOrderNumbers(wrap) {
     const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
     summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
   }
-   }
+
 function addOrderBlock(wrapper) {
   const card = document.createElement("div");
   card.className = "orderCard";
@@ -501,7 +500,7 @@ function addOrderBlock(wrapper) {
   extraRow.className = "extraGrid";
   card.appendChild(extraRow);
 
-  const refresh = () => {
+  const update = () => {
     markInvalidAll();
     const group = card.closest(".groupCard");
     if (group) triggerSummaryUpdate(group);
@@ -532,7 +531,7 @@ function addOrderBlock(wrapper) {
     }
 
     extraRow.innerHTML = "";
-    refresh();
+    update();
   });
 
   b1.addEventListener("change", () => {
@@ -552,20 +551,20 @@ function addOrderBlock(wrapper) {
         o.textContent = o.value = v;
         sel.appendChild(o);
       });
-      sel.addEventListener("change", refresh);
+      sel.addEventListener("change", update);
       markInvalid(sel);
       extraRow.appendChild(sel);
     }
 
-    refresh();
+    update();
   });
 
-  [a, b1, b2, qty].forEach(el => el.addEventListener("change", refresh));
+  [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
 
   wrapper.appendChild(card);
   updateOrderNumbers(wrapper);
-  refresh();
+  update();
 }
 </script>
 </body>
-</html> 
+</html>
