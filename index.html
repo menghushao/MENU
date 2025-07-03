@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.2</title>
+  <title>📦 多客人訂單系統 V1.9.3</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -119,7 +119,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.2</h2>
+  <h2>📋 多客人訂單系統 V1.9.3</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -294,11 +294,13 @@ function updateOrderNumbers(wrap) {
   const boxChk = document.createElement("label");
   boxChk.innerHTML = `<input type="checkbox" /> 自備容器`;
 
+  const refresh = () => {
+    markInvalidAll();
+    triggerSummaryUpdate(card);
+  };
+
   [state, source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk.querySelector("input")].forEach(el =>
-    el.addEventListener("change", () => {
-      markInvalidAll();
-      triggerSummaryUpdate(card);
-    })
+    el.addEventListener("change", refresh)
   );
 
   source.addEventListener("change", () => {
@@ -313,8 +315,7 @@ function updateOrderNumbers(wrap) {
     const ss = String(now.getSeconds()).padStart(2, "0");
     timeLabel.textContent = `${hh}:${mm}:${ss}`;
 
-    markInvalidAll();
-    triggerSummaryUpdate(card);
+    refresh();
   });
       row.append(source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk);
   card.appendChild(row);
@@ -359,7 +360,7 @@ function updateOrderNumbers(wrap) {
     }
 
     const itemMap = {}, countMap = {};
-    let totalQty = 0, totalAmt = 0;
+    let total = 0, count = 0;
 
     orders.forEach(order => {
       const sel = order.querySelectorAll("select");
@@ -376,7 +377,7 @@ function updateOrderNumbers(wrap) {
 
       const parts = [b1, b2].filter(Boolean).sort();
       const short = parts.map(p => {
-        const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+        const row = grid.find(r => r[0] === a && r[1] === p);
         return row?.[2] || p;
       }).join("+");
 
@@ -397,15 +398,15 @@ function updateOrderNumbers(wrap) {
       if (a !== "雞蛋糕" && deal && deal.methods.includes(pay)) {
         const { qty: dealQty, price: dealPrice } = deal;
         const full = Math.floor(qty / dealQty);
-        const remain = qty % dealQty;
+        const rest = qty % dealQty;
         const std = prices[0] || 0;
-        subtotal = full * dealPrice + remain * std;
+        subtotal = full * dealPrice + rest * std;
       } else {
         subtotal = unitPrice * qty;
       }
 
-      totalAmt += subtotal;
-      if (a !== "包裝") totalQty += qty;
+      total += subtotal;
+      if (a !== "包裝") count += qty;
       countMap[a] = (countMap[a] || 0) + qty;
 
       if (!itemMap[key]) {
@@ -418,13 +419,12 @@ function updateOrderNumbers(wrap) {
 
     const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
     const items = Object.entries(itemMap).sort((a, b) => {
-      const ca = seq[a[0].split("|")[0]] ?? 99;
-      const cb = seq[b[0].split("|")[0]] ?? 99;
-      return ca - cb;
+      const na = a[0].split("|")[0], nb = b[0].split("|")[0];
+      return (seq[na] ?? 99) - (seq[nb] ?? 99);
     });
 
-    const line1 = Object.entries(seq).filter(([k]) => countMap[k]).map(([k]) => `${k}${countMap[k]}份`).join("；") + `，共 ${totalQty} 份`;
-    const line2 = [`共 ${totalAmt} 元`];
+    const line1 = Object.entries(seq).filter(([k]) => countMap[k]).map(([k]) => `${k}${countMap[k]}份`).join("；") + `，共 ${count} 份`;
+    const line2 = [`共 ${total} 元`];
     if (delivery) line2.push(delivery);
     if (pickup) {
       const dt = new Date(pickup);
@@ -437,7 +437,7 @@ function updateOrderNumbers(wrap) {
     const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
     summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
   }
-    }
+   }
 function addOrderBlock(wrapper) {
   const card = document.createElement("div");
   card.className = "orderCard";
@@ -501,7 +501,7 @@ function addOrderBlock(wrapper) {
   extraRow.className = "extraGrid";
   card.appendChild(extraRow);
 
-  const update = () => {
+  const refresh = () => {
     markInvalidAll();
     const group = card.closest(".groupCard");
     if (group) triggerSummaryUpdate(group);
@@ -532,7 +532,7 @@ function addOrderBlock(wrapper) {
     }
 
     extraRow.innerHTML = "";
-    update();
+    refresh();
   });
 
   b1.addEventListener("change", () => {
@@ -552,20 +552,20 @@ function addOrderBlock(wrapper) {
         o.textContent = o.value = v;
         sel.appendChild(o);
       });
-      sel.addEventListener("change", update);
+      sel.addEventListener("change", refresh);
       markInvalid(sel);
       extraRow.appendChild(sel);
     }
 
-    update();
+    refresh();
   });
 
-  [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
+  [a, b1, b2, qty].forEach(el => el.addEventListener("change", refresh));
 
   wrapper.appendChild(card);
   updateOrderNumbers(wrapper);
-  update();
+  refresh();
 }
 </script>
 </body>
-</html>
+</html> 
