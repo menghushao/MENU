@@ -352,7 +352,136 @@ function addCustomerCard() {
   updateCustomerNumbers();
   triggerSummaryUpdate(card);
 }
-function triggerSummaryUpdate(group) {
+  function addOrderBlock(wrapper) {
+  const card = document.createElement("div");
+  card.className = "orderCard";
+
+  const title = document.createElement("div");
+  title.className = "orderTitle";
+  const label = document.createElement("span");
+  label.textContent = "第 X 組訂單";
+  const del = document.createElement("button");
+  del.textContent = "❌";
+  del.className = "btn del";
+  del.onclick = () => {
+    if (confirm("刪除此訂單？")) {
+      card.remove();
+      updateOrderNumbers(wrapper);
+      const group = card.closest(".groupCard");
+      if (group) triggerSummaryUpdate(group);
+    }
+  };
+  title.append(label, del);
+  card.appendChild(title);
+
+  const rowTop = document.createElement("div");
+  rowTop.className = "rowLine";
+
+  const a = document.createElement("select");
+  a.innerHTML = `<option value="">請選擇 A</option>`;
+  new Set(grid.slice(10, 106).map(r => r?.[0]).filter(Boolean)).forEach(v => {
+    const o = document.createElement("option");
+    o.value = o.textContent = v;
+    a.appendChild(o);
+  });
+  markInvalid(a);
+
+  const qty = document.createElement("input");
+  qty.type = "number";
+  qty.min = "1";
+  qty.value = "1";
+  qty.style.width = "60px";
+  markInvalid(qty);
+
+  rowTop.append(a, qty);
+  card.appendChild(rowTop);
+
+  const rowMid = document.createElement("div");
+  rowMid.className = "rowLine";
+
+  const b1 = document.createElement("select");
+  b1.innerHTML = `<option value="">請選擇 B</option>`;
+  markInvalid(b1);
+
+  const b2 = document.createElement("select");
+  b2.innerHTML = `<option value="">請選擇 C</option>`;
+  b2.style.display = "none";
+  markInvalid(b2);
+
+  rowMid.append(b1, b2);
+  card.appendChild(rowMid);
+
+  const extraRow = document.createElement("div");
+  extraRow.className = "extraGrid";
+  card.appendChild(extraRow);
+
+  const update = () => {
+    markInvalidAll();
+    const group = card.closest(".groupCard");
+    if (group) triggerSummaryUpdate(group);
+  };
+
+  a.addEventListener("change", () => {
+    const val = a.value.trim();
+    const matched = grid.filter(r => r?.[0]?.trim() === val);
+    const bSet = new Set(matched.map(r => r?.[1]).filter(Boolean));
+
+    b1.innerHTML = `<option value="">請選擇 B</option>`;
+    [...bSet].forEach(v => {
+      const o = document.createElement("option");
+      o.value = o.textContent = v;
+      b1.appendChild(o);
+    });
+
+    if (val === "雞蛋糕") {
+      b2.style.display = "inline-block";
+      b2.innerHTML = `<option value="">請選擇 C</option>`;
+      [...bSet].forEach(v => {
+        const o = document.createElement("option");
+        o.value = o.textContent = v;
+        b2.appendChild(o);
+      });
+    } else {
+      b2.style.display = "none";
+    }
+
+    extraRow.innerHTML = "";
+    update();
+  });
+
+  b1.addEventListener("change", () => {
+    const valA = a.value.trim();
+    const valB = b1.value.trim();
+    const row = grid.find(r => r?.[0]?.trim() === valA && r?.[1]?.trim() === valB);
+    if (!row) return;
+
+    const opts = row.slice(5, 15).map(v => v?.trim()).filter(Boolean);
+    extraRow.innerHTML = "";
+
+    for (let i = 1; i <= 8; i++) {
+      const sel = document.createElement("select");
+      sel.innerHTML = `<option value="">附${i}</option>`;
+      opts.forEach(v => {
+        const o = document.createElement("option");
+        o.textContent = o.value = v;
+        sel.appendChild(o);
+      });
+      sel.addEventListener("change", update);
+      markInvalid(sel);
+      extraRow.appendChild(sel);
+    }
+
+    update();
+  });
+
+  b2.addEventListener("change", update);
+  [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
+
+  wrapper.appendChild(card);
+  updateOrderNumbers(wrapper);
+  update();
+}
+ function triggerSummaryUpdate(group) {
   const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
   const pickup = group.querySelector("input[type='datetime-local']")?.value;
   const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
@@ -491,4 +620,4 @@ function triggerSummaryUpdate(group) {
 }
 </script>
 </body>
-</html>
+</html> 
