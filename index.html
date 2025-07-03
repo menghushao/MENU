@@ -170,7 +170,7 @@ function markInvalidAll() {
     });
     grid = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
     document.getElementById("loader").style.display = "none";
-    addCustomerCard(); // 🚀 初始一組客人卡
+    addCustomerCard();
   } catch (err) {
     document.getElementById("loader").textContent = "❌ 載入失敗";
     console.error(err);
@@ -201,7 +201,7 @@ function updateOrderNumbers(wrap) {
     if (label) label.textContent = `第 ${i + 1} 組訂單`;
   });
 }
-  function addCustomerCard() {
+function addCustomerCard() {
   const container = document.getElementById("container");
   const card = document.createElement("div");
   card.className = "groupCard";
@@ -216,6 +216,7 @@ function updateOrderNumbers(wrap) {
     if (confirm("確定刪除此客人？")) {
       card.remove();
       updateCustomerNumbers();
+      triggerSummaryUpdate();
     }
   };
 
@@ -293,7 +294,7 @@ function updateOrderNumbers(wrap) {
   const boxChk = document.createElement("label");
   boxChk.innerHTML = `<input type="checkbox" /> 自備容器`;
 
-  // 🚀 所有欄位都綁定刷新摘要
+  // 🧠 所有欄位綁定刷新（含外層欄位）
   [state, source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk.querySelector("input")].forEach(el =>
     el.addEventListener("change", () => {
       markInvalidAll();
@@ -301,7 +302,7 @@ function updateOrderNumbers(wrap) {
     })
   );
 
-  // 顧客來源選擇即顯示時間
+  // ⏰ 顧客來源改變時立即記錄時間與匹配付款方式
   source.addEventListener("change", () => {
     const val = source.value.trim();
     orderNo.style.display = val === "Ｕber Eats" ? "inline-block" : "none";
@@ -317,7 +318,7 @@ function updateOrderNumbers(wrap) {
     markInvalidAll();
     triggerSummaryUpdate();
   });
-      row.append(source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk);
+    row.append(source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk);
   card.appendChild(row);
 
   const orderBox = document.createElement("div");
@@ -341,112 +342,120 @@ function updateOrderNumbers(wrap) {
 
   function triggerSummaryUpdate() {
     const payMethod = payment.value.trim();
-    const orders = [...orderBox.querySelectorAll(".orderCard")];
     const payCol = grid[6].findIndex(v => v === payMethod);
+    const orders = [...orderBox.querySelectorAll(".orderCard")];
+
     const dealMap = {};
     for (let i = 1; i <= 8; i++) {
-      const code = grid[i][0];
-      if (!code) continue;
-      dealMap[code] = {
+      const dealCode = grid[i][0];
+      if (!dealCode) continue;
+      dealMap[dealCode] = {
         qty: parseInt(grid[i][1]),
         price: parseInt(grid[i][2]),
         methods: (grid[i][3] || "").split("、")
       };
     }
 
-    const list = [], countMap = {}, temp = [];
-    let totalAmount = 0, totalCount = 0;
+    const items = [];
 
     orders.forEach(order => {
       const selects = order.querySelectorAll("select");
       const a = selects[0]?.value.trim();
-      const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
       let b1 = selects[1]?.value.trim();
       let b2 = selects[2]?.style.display !== "none" ? selects[2]?.value.trim() : "";
-
+      const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
+      const extra = [...order.querySelectorAll(".extraGrid select")]
+        .map(s => s.value.trim()).filter(Boolean).join("+");
       if (!a || (!b1 && !b2)) return;
 
-      // 🧠 雞蛋糕單選補雙顆同味
+      // 雞蛋糕判斷（B1 / B2 任一有值 → 自動視為雙顆）
       if (a === "雞蛋糕") {
         if (!b1 && b2) b1 = b2;
         if (!b2 && b1) b2 = b1;
       }
 
-      const parts = [b1, b2].filter(Boolean).sort();
-      const full = parts.join("+");
+      const partNames = [b1, b2].filter(Boolean).sort();
+      const partShorts = partNames.map(p => {
+        const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+        return row?.[2] || p;
+      });
+      const fullShort = partShorts.join("+");
+      const fullKey = [a, fullShort, extra].join("|");
+      const prices = partNames.map(p => {
+        const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+        return parseFloat(row?.[payCol]) || 0;
+      });
+      const price = prices.reduce((a, b) => a + b, 0);
+      const dCode = partNames
+        .map(p => grid.find(r => r?.[0] === a && r?.[1] === p)?.[3])
+        .find(Boolean);
 
-      const rows = parts.map(p => grid.find(r => r?.[0] === a && r?.[1] === p));
-      const short = rows.map(r => r?.[2] || "").join("+");
-      const extras = [...order.querySelectorAll(".extraGrid select")]
-        .map(e => e.value.trim()).filter(Boolean).join("+");
-      const extraText = extras ? `(${extras})` : "";
+      items.push({
+        id: fullKey,
+        name: a,
+        short: fullShort + (extra ? `(${extra})` : ""),
+        qty,
+        pricePerUnit: price,
+        totalPiece: a === "雞蛋糕" ? qty * 2 : qty,
+        dCode
+      });
+    });
 
-      const dCodes = rows.map(r => r?.[3]).filter(Boolean);
-      const priceList = rows.map(r => parseFloat(r?.[payCol]) || 0);
-      const unitTotal = priceList.reduce((a, b) => a + b, 0);
-      let subtotal = qty * unitTotal;
-
-      const countKey = `${a}|${short}|${extras}`;
-      const dealRows = rows.filter(r => r?.[3]);
-      const firstDealCode = dealRows[0]?.[3];
-      const deal = dealMap[firstDealCode];
-      const canApplyDeal = deal && deal.methods.includes(payMethod);
-
-      if (a !== "雞蛋糕" && canApplyDeal) {
-        const div = Math.floor(qty / deal.qty);
-        const mod = qty % deal.qty;
-        subtotal = div * deal.price + mod * (priceList[0] || 0);
-      }
-
-      totalAmount += subtotal;
-      if (a !== "包裝") totalCount += qty;
-      countMap[a] = (countMap[a] || 0) + qty;
-
-      const item = list.find(i => i.key === countKey);
-      if (item) {
-        item.qty += qty;
-        item.total += a === "雞蛋糕" ? qty * 2 : qty;
-        item.price += subtotal;
+    // 分組聚合
+    const grouped = {};
+    items.forEach(i => {
+      if (!grouped[i.id]) {
+        grouped[i.id] = { ...i };
       } else {
-        list.push({
-          key: countKey,
-          name: a,
-          label: short + extraText,
-          qty,
-          total: a === "雞蛋糕" ? qty * 2 : qty,
-          price: subtotal
-        });
+        grouped[i.id].qty += i.qty;
+        grouped[i.id].totalPiece += i.totalPiece;
       }
     });
 
+    const groups = Object.values(grouped);
     const order = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
-    list.sort((a, b) => (order[a.name] ?? 99) - (order[b.name] ?? 99));
+    groups.sort((a, b) => (order[a.name] ?? 99) - (order[b.name] ?? 99));
+
+    let totalCount = 0;
+    let totalAmount = 0;
+    const countMap = {};
+
+    const summaryLines = groups.map(g => {
+      let subtotal = 0;
+      const deal = g.dCode && dealMap[g.dCode];
+      const applyDeal = deal && deal.methods.includes(payMethod);
+      if (g.name !== "雞蛋糕" && deal && applyDeal) {
+        const full = Math.floor(g.qty / deal.qty);
+        const remain = g.qty % deal.qty;
+        subtotal = full * deal.price + remain * g.pricePerUnit;
+      } else {
+        subtotal = g.qty * g.pricePerUnit;
+      }
+      totalAmount += subtotal;
+      if (g.name !== "包裝") totalCount += g.qty;
+      countMap[g.name] = (countMap[g.name] || 0) + g.qty;
+      return `${g.short}X${g.qty}`;
+    });
 
     const line1 = Object.entries(order)
-      .filter(([k]) => countMap[k])
-      .map(([k]) => `${k}${countMap[k]}份`).join("；") + `，共 ${totalCount} 份`;
+      .filter(([key]) => countMap[key])
+      .map(([key]) => `${key}${countMap[key]}份`).join("；") + `，共 ${totalCount} 份`;
 
-    const line2s = [`共 ${totalAmount} 元`];
-    if (delivery.value.trim()) line2s.push(delivery.value.trim());
+    const line2Parts = [`共 ${totalAmount} 元`];
+    if (delivery.value.trim()) line2Parts.push(delivery.value.trim());
     if (pickupTime.value) {
       const dt = new Date(pickupTime.value);
       if (!isNaN(dt)) {
-        const y = dt.getFullYear();
-        const m = dt.getMonth() + 1;
-        const d = dt.getDate();
-        const h = dt.getHours();
-        const mm = String(dt.getMinutes()).padStart(2, "0");
-        const label = delivery.value.trim() ? "送達" : "取餐";
-        line2s.push(`${label}時間 ${y}/${m}/${d}/${h}:${mm}`);
+        const y = dt.getFullYear(), m = dt.getMonth() + 1, d = dt.getDate();
+        const h = dt.getHours(), mi = String(dt.getMinutes()).padStart(2, "0");
+        const tag = delivery.value.trim() ? "送達" : "取餐";
+        line2Parts.push(`${tag}時間 ${y}/${m}/${d}/${h}:${mi}`);
       }
     }
 
-    const line3 = list.map(i => `${i.label}X${i.qty}`).join("；");
-
-    summary.textContent = `${line1}\n${line2s.join("； ")}\n${line3}`;
+    summary.textContent = `${line1}\n${line2Parts.join("； ")}\n${summaryLines.join("；")}`;
   }
-}
- function addOrderBlock(wrapper) {
+  function addOrderBlock(wrapper) {
   const card = document.createElement("div");
   card.className = "orderCard";
 
@@ -579,4 +588,4 @@ function updateOrderNumbers(wrap) {
 }
 </script>
 </body>
-</html> 
+</html>
