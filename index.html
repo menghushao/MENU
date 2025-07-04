@@ -66,6 +66,23 @@
       border: 1px solid #999;
       padding: 10px;
       background: #fcfcfc;
+      display: flex;
+      gap: 8px;
+    }
+
+    .orderLeft {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .logOutput {
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-line;
+      background: #fff3e0;
+      border-left: 3px solid #ff9800;
+      padding: 6px 8px;
+      width: 140px;
     }
 
     .orderTitle {
@@ -113,6 +130,7 @@
       padding: 4px 8px;
       font-size: 13px;
       cursor: pointer;
+      z-index: 9999;
     }
   </style>
 </head>
@@ -356,6 +374,13 @@ function addCustomerCard() {
   const card = document.createElement("div");
   card.className = "orderCard";
 
+  const leftSide = document.createElement("div");
+  leftSide.className = "orderLeft";
+
+  const logDiv = document.createElement("div");
+  logDiv.className = "logOutput";
+  logDiv.textContent = "🧾 尚未判斷";
+
   const title = document.createElement("div");
   title.className = "orderTitle";
   const label = document.createElement("span");
@@ -372,7 +397,7 @@ function addCustomerCard() {
     }
   };
   title.append(label, del);
-  card.appendChild(title);
+  leftSide.appendChild(title);
 
   const rowTop = document.createElement("div");
   rowTop.className = "rowLine";
@@ -394,7 +419,7 @@ function addCustomerCard() {
   markInvalid(qty);
 
   rowTop.append(a, qty);
-  card.appendChild(rowTop);
+  leftSide.appendChild(rowTop);
 
   const rowMid = document.createElement("div");
   rowMid.className = "rowLine";
@@ -409,11 +434,11 @@ function addCustomerCard() {
   markInvalid(b2);
 
   rowMid.append(b1, b2);
-  card.appendChild(rowMid);
+  leftSide.appendChild(rowMid);
 
   const extraRow = document.createElement("div");
   extraRow.className = "extraGrid";
-  card.appendChild(extraRow);
+  leftSide.appendChild(extraRow);
 
   const update = () => {
     markInvalidAll();
@@ -477,11 +502,14 @@ function addCustomerCard() {
   b2.addEventListener("change", update);
   [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
 
+  card.appendChild(leftSide);
+  card.appendChild(logDiv);
+
   wrapper.appendChild(card);
   updateOrderNumbers(wrapper);
   update();
 }
- function triggerSummaryUpdate(group) {
+  function triggerSummaryUpdate(group) {
   const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
   const pickup = group.querySelector("input[type='datetime-local']")?.value;
   const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
@@ -500,14 +528,21 @@ function addCustomerCard() {
     };
   }
 
-  const tagMap = {}, normal = [];
+  const countMap = {}, itemMap = {};
+  let total = 0, count = 0;
+
   for (const order of orders) {
+    const logDiv = order.querySelector(".logOutput");
     const sel = order.querySelectorAll("select");
     const a = sel[0]?.value.trim();
     let b1 = sel[1]?.value.trim();
     let b2 = sel[2]?.style.display !== "none" ? sel[2]?.value.trim() : "";
     const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
-    if (!a || (!b1 && !b2)) continue;
+
+    if (!a || (!b1 && !b2)) {
+      if (logDiv) logDiv.innerText = "🧾 無效資料";
+      continue;
+    }
 
     if (a === "雞蛋糕") {
       if (!b1 && b2) b1 = b2;
@@ -516,86 +551,53 @@ function addCustomerCard() {
 
     const parts = [b1, b2].filter(Boolean).sort();
     const dVals = parts.map(p => {
-      const row = grid.find(r => r[0] === a && r[1] === p);
+      const row = grid.find(r => r?.[0] === a && r?.[1] === p);
       return row?.[3];
     }).filter(Boolean);
 
     const matchedCode = dVals.find(code => dealMap[code] && dealMap[code].methods.includes(pay));
-    if (matchedCode) {
-      if (!tagMap[matchedCode]) tagMap[matchedCode] = [];
-      tagMap[matchedCode].push({ a, parts, qty });
-    } else {
-      normal.push({ a, parts, qty });
-    }
-  }
-
-  const countMap = {}, itemMap = {};
-  let total = 0, count = 0;
-
-  for (const code in tagMap) {
-    const deal = dealMap[code];
-    const items = tagMap[code];
-    const totalQty = items.reduce((sum, i) => sum + i.qty, 0);
-    const groupCount = Math.floor(totalQty / deal.qty);
-    const remainCount = totalQty % deal.qty;
-    total += groupCount * deal.price;
-
-    let remain = remainCount;
-    for (const item of items) {
-      const short = item.parts.map(p => {
-        const row = grid.find(r => r[0] === item.a && r[1] === p);
-        return row?.[2] || p;
-      }).join("+");
-      const key = `${item.a}|${short}|`;
-      const use = Math.min(item.qty, remain);
-      const leftover = item.qty - use;
-
-      if (leftover > 0) {
-        const prices = item.parts.map(p => {
-          const row = grid.find(r => r[0] === item.a && r[1] === p);
-          return parseFloat(row?.[payCol]) || 0;
-        });
-        const unitPrice = prices.reduce((a, b) => a + b, 0);
-        total += unitPrice * leftover;
-      }
-
-      remain -= use;
-
-      if (!itemMap[key]) {
-        itemMap[key] = { label: short, qty: item.qty, total: item.a === "雞蛋糕" ? item.qty * 2 : item.qty };
-      } else {
-        itemMap[key].qty += item.qty;
-        itemMap[key].total += item.a === "雞蛋糕" ? item.qty * 2 : item.qty;
-      }
-
-      if (item.a !== "包裝") count += item.qty;
-      countMap[item.a] = (countMap[item.a] || 0) + item.qty;
-    }
-  }
-
-  for (const item of normal) {
-    const short = item.parts.map(p => {
-      const row = grid.find(r => r[0] === item.a && r[1] === p);
+    const label = parts.map(p => {
+      const row = grid.find(r => r?.[0] === a && r?.[1] === p);
       return row?.[2] || p;
     }).join("+");
-    const key = `${item.a}|${short}|`;
 
-    const prices = item.parts.map(p => {
-      const row = grid.find(r => r[0] === item.a && r[1] === p);
-      return parseFloat(row?.[payCol]) || 0;
-    });
-    const unitPrice = prices.reduce((a, b) => a + b, 0);
-    total += unitPrice * item.qty;
+    const key = `${a}|${label}|`;
 
-    if (!itemMap[key]) {
-      itemMap[key] = { label: short, qty: item.qty, total: item.a === "雞蛋糕" ? item.qty * 2 : item.qty };
+    let subtotal = 0;
+    let logText = `🧾 判斷歷程：\n品項：${label} ×${qty}`;
+
+    if (matchedCode) {
+      const deal = dealMap[matchedCode];
+      const inGroup = grid.slice(2, 10).some(r => r[0] === matchedCode);
+      const matched = inGroup && deal.methods.includes(pay);
+      const full = Math.floor(qty / deal.qty);
+      const rest = qty % deal.qty;
+      const row = grid.find(r => r?.[0] === a && r?.[1] === parts[0]);
+      const stdPrice = parseFloat(row?.[payCol]) || 0;
+
+      subtotal = full * deal.price + rest * stdPrice;
+      logText += `\nD值＝${matchedCode}；群組包含＝✅；付款方式包含＝✅\n套特價 ➜ ${deal.qty}入${deal.price}元 ×${full}組 + ${rest}×${stdPrice}元 = ${subtotal} 元`;
     } else {
-      itemMap[key].qty += item.qty;
-      itemMap[key].total += item.a === "雞蛋糕" ? item.qty * 2 : item.qty;
+      const rows = parts.map(p => grid.find(r => r?.[0] === a && r?.[1] === p));
+      const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
+      const unitPrice = prices.reduce((a, b) => a + b, 0);
+      subtotal = unitPrice * qty;
+
+      logText += `\n未符合特價 ➜ ${qty} × ${unitPrice} = ${subtotal} 元`;
     }
 
-    if (item.a !== "包裝") count += item.qty;
-    countMap[item.a] = (countMap[item.a] || 0) + item.qty;
+    if (logDiv) logDiv.innerText = logText;
+
+    total += subtotal;
+    if (a !== "包裝") count += qty;
+    countMap[a] = (countMap[a] || 0) + qty;
+
+    if (!itemMap[key]) {
+      itemMap[key] = { label, qty, total: a === "雞蛋糕" ? qty * 2 : qty };
+    } else {
+      itemMap[key].qty += qty;
+      itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
+    }
   }
 
   const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
@@ -620,4 +622,4 @@ function addCustomerCard() {
 }
 </script>
 </body>
-</html> 
+</html>
