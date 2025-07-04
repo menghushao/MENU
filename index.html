@@ -92,6 +92,10 @@
       margin-bottom: 6px;
     }
 
+    .orderFields > div {
+      margin-bottom: 6px;
+    }
+
     .extraGrid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -287,83 +291,301 @@ function addCustomerCard() {
   orderNo.placeholder = "填入單號";
   orderNo.style.display = "none";
   markInvalid(orderNo);
-    const payment = document.createElement("select");
-  payment.innerHTML = `<option value="">支付方式</option>`;
-  grid[6].slice(15, 32).forEach(v => {
-    if (v) {
-      const o = document.createElement("option");
-      o.value = o.textContent = v.trim();
-      payment.appendChild(o);
+  function addOrderBlock(wrapper) {
+  const card = document.createElement("div");
+  card.className = "orderCard";
+
+  const leftSide = document.createElement("div");
+  leftSide.className = "orderLeft";
+
+  const logDiv = document.createElement("div");
+  logDiv.className = "logOutput";
+  logDiv.textContent = "🧾 尚未判斷";
+
+  const title = document.createElement("div");
+  title.className = "orderTitle";
+  const label = document.createElement("span");
+  label.textContent = "第 X 組訂單";
+  const del = document.createElement("button");
+  del.textContent = "❌";
+  del.className = "btn del";
+  del.onclick = () => {
+    if (confirm("刪除此訂單？")) {
+      card.remove();
+      updateOrderNumbers(wrapper);
+      const group = card.closest(".groupCard");
+      if (group) triggerSummaryUpdate(group);
     }
+  };
+  title.append(label, del);
+  leftSide.appendChild(title);
+
+  const rowTop = document.createElement("div");
+  rowTop.className = "rowLine";
+
+  const a = document.createElement("select");
+  a.innerHTML = `<option value="">請選擇 A</option>`;
+  new Set(grid.slice(10, 106).map(r => r?.[0]).filter(Boolean)).forEach(v => {
+    const o = document.createElement("option");
+    o.value = o.textContent = v;
+    a.appendChild(o);
   });
-  markInvalid(payment);
+  markInvalid(a);
 
-  const pickupTime = document.createElement("input");
-  pickupTime.type = "datetime-local";
-  pickupTime.placeholder = "取餐時間";
-  markInvalid(pickupTime);
+  const qty = document.createElement("input");
+  qty.type = "number";
+  qty.min = "1";
+  qty.value = "1";
+  qty.style.width = "60px";
+  markInvalid(qty);
 
-  const delivery = document.createElement("input");
-  delivery.placeholder = "外送資訊";
-  markInvalid(delivery);
+  rowTop.append(a, qty);
+  leftSide.appendChild(rowTop);
 
-  const points = document.createElement("input");
-  points.placeholder = "集點卡兌換數量";
-  markInvalid(points);
+  const rowMid = document.createElement("div");
+  rowMid.className = "rowLine";
 
-  const adjust = document.createElement("input");
-  adjust.placeholder = "金額調整";
-  markInvalid(adjust);
+  const b1 = document.createElement("select");
+  b1.innerHTML = `<option value="">請選擇 B</option>`;
+  markInvalid(b1);
 
-  const boxChk = document.createElement("label");
-  boxChk.innerHTML = `<input type="checkbox" /> 自備容器`;
+  const b2 = document.createElement("select");
+  b2.innerHTML = `<option value="">請選擇 C</option>`;
+  b2.style.display = "none";
+  markInvalid(b2);
 
-  const refresh = () => {
+  rowMid.append(b1, b2);
+  leftSide.appendChild(rowMid);
+
+  const extraRow = document.createElement("div");
+  extraRow.className = "extraGrid";
+  leftSide.appendChild(extraRow);
+
+  const update = () => {
     markInvalidAll();
-    triggerSummaryUpdate(card);
+    const group = card.closest(".groupCard");
+    if (group) triggerSummaryUpdate(group);
   };
 
-  [state, source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk.querySelector("input")].forEach(el =>
-    el.addEventListener("change", refresh)
-  );
+  a.addEventListener("change", () => {
+    const val = a.value.trim();
+    const matched = grid.filter(r => r?.[0]?.trim() === val);
+    const bSet = new Set(matched.map(r => r?.[1]).filter(Boolean));
 
-  source.addEventListener("change", () => {
-    const val = source.value.trim();
-    orderNo.style.display = val === "Ｕber Eats" ? "inline-block" : "none";
-    const match = [...payment.options].find(o => o.value === val);
-    if (match) payment.value = val;
+    b1.innerHTML = `<option value="">請選擇 B</option>`;
+    [...bSet].forEach(v => {
+      const o = document.createElement("option");
+      o.value = o.textContent = v;
+      b1.appendChild(o);
+    });
 
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
-    const ss = String(now.getSeconds()).padStart(2, "0");
-    timeLabel.textContent = `${hh}:${mm}:${ss}`;
+    if (val === "雞蛋糕") {
+      b2.style.display = "inline-block";
+      b2.innerHTML = `<option value="">請選擇 C</option>`;
+      [...bSet].forEach(v => {
+        const o = document.createElement("option");
+        o.value = o.textContent = v;
+        b2.appendChild(o);
+      });
+    } else {
+      b2.style.display = "none";
+    }
 
-    refresh();
+    extraRow.innerHTML = "";
+    update();
   });
 
-  row.append(source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk);
-  card.appendChild(row);
+  b1.addEventListener("change", () => {
+    const valA = a.value.trim();
+    const valB = b1.value.trim();
+    const row = grid.find(r => r?.[0]?.trim() === valA && r?.[1]?.trim() === valB);
+    if (!row) return;
 
-  const orderBox = document.createElement("div");
-  orderBox.className = "orderContainer";
-  card.appendChild(orderBox);
+    const opts = row.slice(5, 15).map(v => v?.trim()).filter(Boolean);
+    extraRow.innerHTML = "";
 
-  const addOrderBtn = document.createElement("button");
-  addOrderBtn.textContent = "➕ 新增訂單";
-  addOrderBtn.className = "btn add";
-  addOrderBtn.onclick = () => {
-    addOrderBlock(orderBox);
-    updateOrderNumbers(orderBox);
-    triggerSummaryUpdate(card);
-  };
-  card.appendChild(addOrderBtn);
+    for (let i = 1; i <= 8; i++) {
+      const sel = document.createElement("select");
+      sel.innerHTML = `<option value="">附${i}</option>`;
+      opts.forEach(v => {
+        const o = document.createElement("option");
+        o.textContent = o.value = v;
+        sel.appendChild(o);
+      });
+      sel.addEventListener("change", update);
+      markInvalid(sel);
+      extraRow.appendChild(sel);
+    }
 
-  container.appendChild(card);
-  addOrderBlock(orderBox);
-  updateOrderNumbers(orderBox);
-  updateCustomerNumbers();
-  triggerSummaryUpdate(card);
+    update();
+  });
+
+  b2.addEventListener("change", update);
+  [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
+
+  card.appendChild(leftSide);
+  card.appendChild(logDiv);
+
+  wrapper.appendChild(card);
+  updateOrderNumbers(wrapper);
+  update();
+}
+  function triggerSummaryUpdate(group) {
+  const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
+  const pickup = group.querySelector("input[type='datetime-local']")?.value;
+  const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
+  const summary = group.querySelector(".summaryText");
+  const orders = [...group.querySelectorAll(".orderCard")];
+  const payCol = grid[6].findIndex(v => v === pay);
+
+  const dealMap = {}, tagCount = {};
+  for (let i = 2; i <= 9; i++) {
+    const code = grid[i][0];
+    if (!code) continue;
+    dealMap[code] = {
+      qty: parseInt(grid[i][1]),
+      price: parseInt(grid[i][2]),
+      methods: (grid[i][3] || "").split("、"),
+      group: `A${i - 1}`,
+      rowIndex: i
+    };
+    tagCount[code] = 0;
+  }
+
+  const allParts = [];
+  for (const order of orders) {
+    const sel = order.querySelectorAll("select");
+    const a = sel[0]?.value.trim();
+    let b1 = sel[1]?.value.trim();
+    let b2 = sel[2]?.style.display !== "none" ? sel[2]?.value.trim() : "";
+    const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
+    if (!a || (!b1 && !b2)) continue;
+    if (a === "雞蛋糕") {
+      if (!b1 && b2) b1 = b2;
+      if (!b2 && b1) b2 = b1;
+    }
+    const parts = [b1, b2].filter(Boolean).sort();
+    for (let i = 0; i < qty; i++) allParts.push(...parts);
+  }
+
+  for (const part of allParts) {
+    const row = grid.find(r => r?.[1] === part);
+    if (row?.[3] && dealMap[row[3]]) tagCount[row[3]]++;
+  }
+
+  const countMap = {}, itemMap = {};
+  let total = 0, count = 0;
+
+  for (const order of orders) {
+    const logDiv = order.querySelector(".logOutput");
+    const sel = order.querySelectorAll("select");
+    const a = sel[0]?.value.trim();
+    let b1 = sel[1]?.value.trim();
+    let b2 = sel[2]?.style.display !== "none" ? sel[2]?.value.trim() : "";
+    const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
+    if (!a || (!b1 && !b2)) {
+      if (logDiv) logDiv.textContent = "🧾 無效資料";
+      continue;
+    }
+
+    if (a === "雞蛋糕") {
+      if (!b1 && b2) b1 = b2;
+      if (!b2 && b1) b2 = b1;
+    }
+
+    const parts = [b1, b2].filter(Boolean).sort();
+    const tags = parts.map(p => {
+      const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+      return row?.[3];
+    }).filter(Boolean);
+
+    const label = parts.map(p => {
+      const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+      return row?.[2] || p;
+    }).join("+");
+
+    const key = `${a}|${label}|`;
+    const tag = tags.find(t => dealMap[t]);
+
+    let log = `🧾 判斷歷程：\n1. 商品為 ${a} ➜ 組合：${label} ×${qty}（共 ${parts.length * qty} 顆）`;
+
+    if (tag) {
+      const deal = dealMap[tag];
+      const tagQty = tagCount[tag];
+      const groupCount = Math.floor(tagQty / deal.qty);
+      const remain = tagQty % deal.qty;
+      const used = Math.min(parts.length * qty, remain);
+      const leftover = parts.length * qty - used;
+      const validPay = deal.methods.includes(pay);
+
+      log += `\n2. 特價代碼：「${tag}」來自 Grid[D??] ➜ 本筆抓取 ${parts.map(p => `D${grid.findIndex(r => r?.[0] === a && r?.[1] === p)}`).join("、")} ➜ 共 ${parts.length * qty} 顆`;
+      log += `\n3. 該代碼屬於群組 ${deal.group} ➜ 出現在 Grid[${deal.rowIndex}]`;
+      log += `\n4. 群組條件：B${deal.rowIndex} = ${deal.qty}、C${deal.rowIndex} = ${deal.price}、D${deal.rowIndex} = ${deal.methods.join("、")}`;
+      log += `\n5. 本筆付款方式：${pay} ➜ ${validPay ? "✅符合特價條件" : "❌不符特價條件"}`;
+
+      if (!validPay) {
+        const prices = parts.map(p => {
+          const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+          return parseFloat(row?.[payCol]) || 0;
+        });
+        const unit = prices.reduce((a, b) => a + b, 0);
+        const sub = unit * qty;
+        total += sub;
+        log += `\n6. 原價計算 ➜ ${prices.join("+")} ×${qty} = ${sub} 元`;
+      } else {
+        const prices = parts.map(p => {
+          const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+          return parseFloat(row?.[payCol]) || 0;
+        });
+        const unit = prices.reduce((a, b) => a + b, 0);
+        const sub = groupCount * deal.price + leftover * unit;
+        total += sub;
+        log += `\n6. 特價計算 ➜ 該代碼共 ${tagQty} 顆 ➜ 可套 ${groupCount} 組 ➜ 餘 ${remain} 顆 ➜ 本筆用 ${used} 顆 ➜ 剩 ${leftover} 顆原價計算`;
+        log += `\n7. 金額組成 ➜ ${deal.price} ×${groupCount} + ${unit} ×${leftover} = ${sub} 元`;
+      }
+    } else {
+      const prices = parts.map(p => {
+        const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+        return parseFloat(row?.[payCol]) || 0;
+      });
+      const unit = prices.reduce((a, b) => a + b, 0);
+      const sub = unit * qty;
+      total += sub;
+      log += `\n2. 無特價代碼 ➜ 原價計算 ➜ ${prices.join("+")} ×${qty} = ${sub} 元`;
+    }
+
+    logDiv.textContent = log;
+
+    if (!itemMap[key]) {
+      itemMap[key] = { label, qty, total: a === "雞蛋糕" ? qty * 2 : qty };
+    } else {
+      itemMap[key].qty += qty;
+      itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
+    }
+
+    if (a !== "包裝") count += qty;
+    countMap[a] = (countMap[a] || 0) + qty;
+  }
+      const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
+  const items = Object.entries(itemMap).sort((a, b) => {
+    const na = a[0].split("|")[0], nb = b[0].split("|")[0];
+    return (seq[na] ?? 99) - (seq[nb] ?? 99);
+  });
+
+  const line1 = Object.entries(seq).filter(([k]) => countMap[k]).map(([k]) => `${k}${countMap[k]}份`).join("；") + `，共 ${count} 份`;
+  const line2 = [`共 ${total} 元`];
+  if (delivery) line2.push(delivery);
+  if (pickup) {
+    const dt = new Date(pickup);
+    if (!isNaN(dt)) {
+      const y = dt.getFullYear(), m = dt.getMonth() + 1, d = dt.getDate();
+      const h = dt.getHours(), mi = String(dt.getMinutes()).padStart(2, "0");
+      line2.push(`${delivery ? "送達" : "取餐"}時間 ${y}/${m}/${d}/${h}:${mi}`);
+    }
+  }
+
+  const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
+  summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
 }
 </script>
 </body>
