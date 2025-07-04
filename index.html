@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.13</title>
+  <title>📦 多客人訂單系統 V1.9.14</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -117,10 +117,9 @@
   </style>
 </head>
 <body>
-
 <div class="stickyBar">
   <h2>📋 多客人訂單系統 V1.9.13</h2>
-  <button id="addCustomerBtn" class="="btn add">➕ 新增客人</button>
+  <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
 <div id="container"></div>
@@ -188,7 +187,8 @@ function markInvalidAll() {
     document.getElementById("loader").textContent = "❌ 載入失敗，請檢查金鑰與資料來源";
   }
 })();
-  function updateCustomerNumbers() {
+
+function updateCustomerNumbers() {
   document.querySelectorAll(".groupCard").forEach((g, i) => {
     const h3 = g.querySelector("h3");
     if (h3) h3.textContent = `第 ${i + 1} 組客人`;
@@ -201,8 +201,7 @@ function updateOrderNumbers(wrap) {
     if (label) label.textContent = `第 ${i + 1} 組訂單`;
   });
 }
-
-function triggerSummaryUpdate(group) {
+  function triggerSummaryUpdate(group) {
   const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
   const pickup = group.querySelector("input[type='datetime-local']")?.value;
   const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
@@ -221,6 +220,8 @@ function triggerSummaryUpdate(group) {
       row: i
     };
   }
+
+  const validCodes = Object.keys(dealMap);
 
   const itemMap = {}, countMap = {}, tagCount = {};
   let total = 0, count = 0;
@@ -262,8 +263,8 @@ function triggerSummaryUpdate(group) {
     const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
     const rowIndexes = parts.map(p => grid.findIndex(r => r[0] === a && r[1] === p));
     const dCodes = rows.map(r => r?.[3]).filter(Boolean);
-    const matchedCode = dCodes.find(code => code && dealMap[code]);
-    const matchedRow = matchedCode ? dealMap[matchedCode].row : -1;
+    const matchedCode = dCodes.find(code => !!code);
+    const matchedRow = matchedCode ? grid.findIndex(r => r[0] === matchedCode) : -1;
     const deal = matchedCode ? dealMap[matchedCode] : null;
     const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
     const unitPrice = prices.reduce((a, b) => a + b, 0);
@@ -280,7 +281,17 @@ function triggerSummaryUpdate(group) {
 
     const unitCount = parts.length * qty;
 
-    if (matchedCode && deal) {
+    if (matchedCode && !validCodes.includes(matchedCode)) {
+      subtotal = unitPrice * qty;
+      log += `3️⃣ 抓到代碼 "${matchedCode}"，但未出現在 Grid[A2~A9] ➜ 此代碼不是有效特價代碼\n`;
+      log += `4️⃣ fallback 原價計算如下：\n`;
+      parts.forEach((p, i) => {
+        const rIdx = rowIndexes[i];
+        const price = prices[i] || 0;
+        log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] = ${price} 元\n`;
+      });
+      log += `5️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
+    } else if (matchedCode && deal) {
       tagCount[matchedCode] = (tagCount[matchedCode] || 0) + unitCount;
       const totalCount = tagCount[matchedCode];
       const groupCount = Math.floor(totalCount / deal.qty);
@@ -291,8 +302,17 @@ function triggerSummaryUpdate(group) {
       log += `5️⃣ 累積 "${matchedCode}" 顆數 ➜ ${totalCount} 顆 ➜ 可湊 ${groupCount} 組，餘 ${remain} 顆\n`;
 
       if (!deal.methods.includes(pay)) {
-        log += `6️⃣ 繼續檢查 D${deal.row} ➜ 無「${pay}」 ➜ 判定不符合特價\n`;
-        log += `7️⃣ fallback 原價計算如下：\n`;
+        log += `6️⃣ 付款方式「${pay}」不符合 D${deal.row} ➜ fallback 原價\n`;
+        subtotal = unitPrice * qty;
+        parts.forEach((p, i) => {
+          const rIdx = rowIndexes[i];
+          const price = prices[i] || 0;
+          log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] = ${price} 元\n`;
+        });
+        log += `7️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
+      } else if (totalCount < deal.qty) {
+        log += `6️⃣ D${deal.row} 含「${pay}」 ➜ 判定符合結帳方式\n`;
+        log += `7️⃣ 但目前累積 "${matchedCode}" 顆數僅 ${totalCount} ➜ 未滿 B${deal.row} 的 ${deal.qty} 顆 ➜ fallback 原價\n`;
         subtotal = unitPrice * qty;
         parts.forEach((p, i) => {
           const rIdx = rowIndexes[i];
@@ -300,35 +320,13 @@ function triggerSummaryUpdate(group) {
           log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] = ${price} 元\n`;
         });
         log += `8️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
-      } else if (totalCount < deal.qty) {
-        log += `6️⃣ D${deal.row} 含「${pay}」 ➜ 判定符合結帳方式\n`;
-        log += `7️⃣ 但目前累積 "${matchedCode}" 顆數僅 ${totalCount} ➜ 未滿 B${deal.row} 的 ${deal.qty} 顆\n`;
-        log += `8️⃣ fallback 原價計算如下：\n`;
-        subtotal = unitPrice * qty;
-        parts.forEach((p, i) => {
-          const rIdx = rowIndexes[i];
-          const price = prices[i] || 0;
-          log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] = ${price} 元\n`;
-        });
-        log += `9️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
       } else {
-        log += `6️⃣ D${deal.row} 含「${pay}」 ➜ 判定符合結帳方式\n`;
-        log += `7️⃣ 且累積 "${matchedCode}" 顆數達 ${totalCount} 顆 ➜ 符合特價組數要求 ${deal.qty} 顆\n`;
         const stdPrice = prices[0] || 0;
         const groupTotal = groupCount * deal.price;
         const remainTotal = remain * stdPrice;
         subtotal = groupTotal + remainTotal;
-        log += `8️⃣ 特價計算 ➜ ${deal.price}×${groupCount} + ${stdPrice}×${remain} = ${subtotal} 元\n`;
+        log += `6️⃣ 特價成立 ➜ ${deal.price}×${groupCount} + ${stdPrice}×${remain} = ${subtotal} 元\n`;
       }
-          } else if (matchedCode && !deal) {
-      subtotal = unitPrice * qty;
-      log += `3️⃣ 抓到代碼 "${matchedCode}" 但未出現在 A2~A9 ➜ fallback 原價\n`;
-      parts.forEach((p, i) => {
-        const rIdx = rowIndexes[i];
-        const price = prices[i] || 0;
-        log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] = ${price} 元\n`;
-      });
-      log += `4️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
     } else {
       subtotal = unitPrice * qty;
       log += `3️⃣ 組合項未對應任何有效特價代碼 ➜ fallback 原價\n`;
@@ -353,8 +351,7 @@ function triggerSummaryUpdate(group) {
       itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
     }
   });
-
-  const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
+      const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
   const items = Object.entries(itemMap).sort((a, b) => {
     const na = a[0].split("|")[0], nb = b[0].split("|")[0];
     return (seq[na] ?? 99) - (seq[nb] ?? 99);
