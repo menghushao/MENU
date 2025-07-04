@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.9</title>
+  <title>📦 多客人訂單系統 V1.9.10</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -119,7 +119,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.9</h2>
+  <h2>📋 多客人訂單系統 V1.9.10</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -429,41 +429,60 @@ function markInvalidAll() {
     }).join("，");
     log += `2️⃣ 組合明細 ➜ ${coordPart}\n`;
 
-    if (matchedCode && deal) {
-      log += `3️⃣ 找到特價代碼 "${matchedCode}" ➜ 對應 A${matchedRow}\n`;
-      log += `4️⃣ 特價條件 ➜ B${matchedRow}=${deal.qty}、C${matchedRow}=${deal.price}、D${matchedRow}=${deal.methods.join("、")}\n`;
+    const unitCount = parts.length * qty;
 
-      const unitCount = parts.length * qty;
+    if (matchedCode && deal) {
+      log += `3️⃣ 抓到代碼 "${matchedCode}" ➜ 對應 A${matchedRow}\n`;
+      log += `4️⃣ 特價條件 ➜ B${matchedRow}=${deal.qty} 組、C${matchedRow}=${deal.price} 元、D${matchedRow}=${deal.methods.join("、")}\n`;
+
       tagCount[matchedCode] = (tagCount[matchedCode] || 0) + unitCount;
       const totalCount = tagCount[matchedCode];
       const groupCount = Math.floor(totalCount / deal.qty);
       const remain = totalCount % deal.qty;
+      log += `5️⃣ 目前 "${matchedCode}" 顆數 ➜ ${totalCount} ➜ 可湊 ${groupCount} 組，餘 ${remain} 顆\n`;
 
-      log += `5️⃣ 累計 "${matchedCode}" 顆數 ➜ ${totalCount} ➜ 可湊 ${groupCount} 組，餘 ${remain} 顆\n`;
-
-      if (deal.methods.includes(pay)) {
+      if (!deal.methods.includes(pay)) {
+        subtotal = unitPrice * qty;
+        log += `6️⃣ 付款方式「${pay}」未列於 D${matchedRow} ➜ 改用原價\n`;
+        parts.forEach((p, i) => {
+          const rIdx = rowIndexes[i];
+          const price = prices[i] || 0;
+          log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] ➜ 金額：${price}\n`;
+        });
+        log += `7️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
+      } else if (totalCount < deal.qty) {
+        subtotal = unitPrice * qty;
+        log += `6️⃣ 數量尚未湊滿 ${deal.qty} 顆 ➜ 暫用原價\n`;
+        parts.forEach((p, i) => {
+          const rIdx = rowIndexes[i];
+          const price = prices[i] || 0;
+          log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] ➜ 金額：${price}\n`;
+        });
+        log += `7️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
+      } else {
         const stdPrice = prices[0] || 0;
         const groupTotal = groupCount * deal.price;
         const remainTotal = remain * stdPrice;
         subtotal = groupTotal + remainTotal;
-        log += `6️⃣ 金額 ➜ 特價 ${deal.price}×${groupCount} + 原價 ${stdPrice}×${remain} = ${subtotal} 元\n`;
-      } else {
-        subtotal = unitPrice * qty;
-        log += `6️⃣ 付款方式「${pay}」不在 D${matchedRow} ➜ 改用原價\n`;
-        parts.forEach((p, i) => {
-          const rIdx = rowIndexes[i];
-          const price = prices[i] || 0;
-          log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] ➜ ${price}\n`;
-        });
-        log += `7️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
+        log += `6️⃣ 套用特價 ➜ ${deal.price}×${groupCount} + ${stdPrice}×${remain} ➜ ${subtotal} 元\n`;
       }
-    } else {
+
+    } else if (matchedCode && !deal) {
+      log += `3️⃣ 抓到代碼 "${matchedCode}"，但該代碼未定義於 A2~A9 ➜ 無法套用特價\n`;
       subtotal = unitPrice * qty;
-      log += `3️⃣ 無特價代碼 ➜ 全數原價結算\n`;
       parts.forEach((p, i) => {
         const rIdx = rowIndexes[i];
         const price = prices[i] || 0;
-        log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] ➜ ${price}\n`;
+        log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] ➜ 金額：${price}\n`;
+      });
+      log += `4️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
+    } else {
+      log += `3️⃣ 沒有對應特價代碼 ➜ 全數原價計算\n`;
+            subtotal = unitPrice * qty;
+      parts.forEach((p, i) => {
+        const rIdx = rowIndexes[i];
+        const price = prices[i] || 0;
+        log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] ➜ 金額：${price}\n`;
       });
       log += `4️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
     }
@@ -481,7 +500,7 @@ function markInvalidAll() {
       itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
     }
   });
-        const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
+      const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
   const items = Object.entries(itemMap).sort((a, b) => {
     const na = a[0].split("|")[0], nb = b[0].split("|")[0];
     return (seq[na] ?? 99) - (seq[nb] ?? 99);
