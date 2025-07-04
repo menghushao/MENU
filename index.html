@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.11</title>
+  <title>📦 多客人訂單系統 V1.9.12</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -119,7 +119,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.10</h2>
+  <h2>📋 多客人訂單系統 V1.9.12</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -431,7 +431,7 @@ function markInvalidAll() {
 
     const unitCount = parts.length * qty;
 
-    if (matchedCode) {
+    if (matchedCode && deal) {
       tagCount[matchedCode] = (tagCount[matchedCode] || 0) + unitCount;
       const totalCount = tagCount[matchedCode];
       const groupCount = Math.floor(totalCount / deal.qty);
@@ -443,7 +443,7 @@ function markInvalidAll() {
 
       if (!deal.methods.includes(pay)) {
         subtotal = unitPrice * qty;
-        log += `6️⃣ 付款方式「${pay}」不在可用範圍 ➜ fallback 原價\n`;
+        log += `6️⃣ 付款方式「${pay}」不符合 D 欄 ➜ fallback 原價\n`;
         parts.forEach((p, i) => {
           const rIdx = rowIndexes[i];
           const price = prices[i] || 0;
@@ -452,7 +452,7 @@ function markInvalidAll() {
         log += `7️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
       } else if (totalCount < deal.qty) {
         subtotal = unitPrice * qty;
-        log += `6️⃣ 組數未達 ➜ 目前僅 ${totalCount} 顆，需滿 ${deal.qty} ➜ fallback 原價\n`;
+        log += `6️⃣ 組數未達 ➜ 當前僅 ${totalCount} 顆，需滿 ${deal.qty} 顆 ➜ fallback 原價\n`;
         parts.forEach((p, i) => {
           const rIdx = rowIndexes[i];
           const price = prices[i] || 0;
@@ -466,6 +466,15 @@ function markInvalidAll() {
         subtotal = groupTotal + remainTotal;
         log += `6️⃣ 套用特價 ➜ ${deal.price}×${groupCount} + ${stdPrice}×${remain} ➜ ${subtotal} 元\n`;
       }
+    } else if (matchedCode && !deal) {
+      subtotal = unitPrice * qty;
+      log += `3️⃣ 抓到代碼 "${matchedCode}" 但未出現在 A2~A9 ➜ fallback 原價\n`;
+      parts.forEach((p, i) => {
+        const rIdx = rowIndexes[i];
+        const price = prices[i] || 0;
+        log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] ➜ 金額：${price}\n`;
+      });
+      log += `4️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
     } else {
       subtotal = unitPrice * qty;
       log += `3️⃣ 組合項未對應任何有效特價代碼 ➜ fallback 原價\n`;
@@ -487,10 +496,11 @@ function markInvalidAll() {
       itemMap[key] = { label, qty, total: a === "雞蛋糕" ? qty * 2 : qty };
     } else {
       itemMap[key].qty += qty;
-      itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
+            itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
     }
   });
-      const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
+
+  const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
   const items = Object.entries(itemMap).sort((a, b) => {
     const na = a[0].split("|")[0], nb = b[0].split("|")[0];
     return (seq[na] ?? 99) - (seq[nb] ?? 99);
@@ -510,8 +520,7 @@ function markInvalidAll() {
   const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
   summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
 }
-
-function addOrderBlock(wrapper) {
+  function addOrderBlock(wrapper) {
   const card = document.createElement("div");
   card.className = "orderCard";
 
