@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.10</title>
+  <title>📦 多客人訂單系統 V1.9.11</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -413,7 +413,7 @@ function markInvalidAll() {
     const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
     const rowIndexes = parts.map(p => grid.findIndex(r => r[0] === a && r[1] === p));
     const dCodes = rows.map(r => r?.[3]).filter(Boolean);
-    const matchedCode = dCodes.find(code => dealMap[code]);
+    const matchedCode = dCodes.find(code => code && dealMap[code]);
     const matchedRow = matchedCode ? dealMap[matchedCode].row : -1;
     const deal = matchedCode ? dealMap[matchedCode] : null;
     const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
@@ -431,19 +431,19 @@ function markInvalidAll() {
 
     const unitCount = parts.length * qty;
 
-    if (matchedCode && deal) {
-      log += `3️⃣ 抓到代碼 "${matchedCode}" ➜ 對應 A${matchedRow}\n`;
-      log += `4️⃣ 特價條件 ➜ B${matchedRow}=${deal.qty} 組、C${matchedRow}=${deal.price} 元、D${matchedRow}=${deal.methods.join("、")}\n`;
-
+    if (matchedCode) {
       tagCount[matchedCode] = (tagCount[matchedCode] || 0) + unitCount;
       const totalCount = tagCount[matchedCode];
       const groupCount = Math.floor(totalCount / deal.qty);
       const remain = totalCount % deal.qty;
-      log += `5️⃣ 目前 "${matchedCode}" 顆數 ➜ ${totalCount} ➜ 可湊 ${groupCount} 組，餘 ${remain} 顆\n`;
+
+      log += `3️⃣ 找到代碼 "${matchedCode}" ➜ 對應 A${matchedRow}\n`;
+      log += `4️⃣ 特價條件 ➜ B${matchedRow}=${deal.qty}、C${matchedRow}=${deal.price}、D${matchedRow}=${deal.methods.join("、")}\n`;
+      log += `5️⃣ 累積 "${matchedCode}" 顆數 ➜ ${totalCount} ➜ 可湊 ${groupCount} 組，餘 ${remain} 顆\n`;
 
       if (!deal.methods.includes(pay)) {
         subtotal = unitPrice * qty;
-        log += `6️⃣ 付款方式「${pay}」未列於 D${matchedRow} ➜ 改用原價\n`;
+        log += `6️⃣ 付款方式「${pay}」不在可用範圍 ➜ fallback 原價\n`;
         parts.forEach((p, i) => {
           const rIdx = rowIndexes[i];
           const price = prices[i] || 0;
@@ -452,7 +452,7 @@ function markInvalidAll() {
         log += `7️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
       } else if (totalCount < deal.qty) {
         subtotal = unitPrice * qty;
-        log += `6️⃣ 數量尚未湊滿 ${deal.qty} 顆 ➜ 暫用原價\n`;
+        log += `6️⃣ 組數未達 ➜ 目前僅 ${totalCount} 顆，需滿 ${deal.qty} ➜ fallback 原價\n`;
         parts.forEach((p, i) => {
           const rIdx = rowIndexes[i];
           const price = prices[i] || 0;
@@ -466,19 +466,9 @@ function markInvalidAll() {
         subtotal = groupTotal + remainTotal;
         log += `6️⃣ 套用特價 ➜ ${deal.price}×${groupCount} + ${stdPrice}×${remain} ➜ ${subtotal} 元\n`;
       }
-
-    } else if (matchedCode && !deal) {
-      log += `3️⃣ 抓到代碼 "${matchedCode}"，但該代碼未定義於 A2~A9 ➜ 無法套用特價\n`;
-      subtotal = unitPrice * qty;
-      parts.forEach((p, i) => {
-        const rIdx = rowIndexes[i];
-        const price = prices[i] || 0;
-        log += `　- ${p} ➜ Grid[C${rIdx}+${payCol}] ➜ 金額：${price}\n`;
-      });
-      log += `4️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
     } else {
-      log += `3️⃣ 沒有對應特價代碼 ➜ 全數原價計算\n`;
-            subtotal = unitPrice * qty;
+      subtotal = unitPrice * qty;
+      log += `3️⃣ 組合項未對應任何有效特價代碼 ➜ fallback 原價\n`;
       parts.forEach((p, i) => {
         const rIdx = rowIndexes[i];
         const price = prices[i] || 0;
