@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.8</title>
+  <title>📦 多客人訂單系統 V1.9.6</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -62,26 +62,10 @@
 
     .orderCard {
       flex: 0 0 auto;
-      display: flex;
-      gap: 8px;
-      width: 500px;
+      width: 320px;
       border: 1px solid #999;
       padding: 10px;
       background: #fcfcfc;
-    }
-
-    .orderLeft {
-      flex: 1;
-    }
-
-    .logOutput {
-      font-size: 12px;
-      line-height: 1.4;
-      white-space: pre-line;
-      background: #fff8e1;
-      border-left: 3px solid #ff9800;
-      padding: 8px 10px;
-      min-width: 160px;
     }
 
     .orderTitle {
@@ -89,6 +73,10 @@
       justify-content: space-between;
       align-items: center;
       font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    .orderFields > div {
       margin-bottom: 6px;
     }
 
@@ -125,13 +113,13 @@
       padding: 4px 8px;
       font-size: 13px;
       cursor: pointer;
-      z-index: 9999;
     }
   </style>
 </head>
 <body>
+
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.8</h2>
+  <h2>📋 多客人訂單系統 V1.9.6</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -147,8 +135,7 @@ window.addEventListener("beforeunload", e => {
   e.preventDefault();
   e.returnValue = "你確定要離開？資料將會遺失";
 });
-
-function markInvalid(el) {
+  function markInvalid(el) {
   const isSelect = el.tagName === "SELECT";
   const empty = isSelect ? el.value === "" : !el.value.trim();
   el.classList.toggle("invalid", empty);
@@ -186,9 +173,7 @@ function markInvalidAll() {
     const ivHex = CryptoJS.enc.Hex.parse(iv);
     const encrypted = CryptoJS.enc.Base64.parse(ciphertext);
     const decrypted = CryptoJS.AES.decrypt({ ciphertext: encrypted }, key, {
-      iv: ivHex,
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7
+      iv: ivHex, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7
     });
 
     const jsonText = decrypted.toString(CryptoJS.enc.Utf8);
@@ -367,22 +352,117 @@ function addCustomerCard() {
   updateCustomerNumbers();
   triggerSummaryUpdate(card);
 }
-  function addOrderBlock(wrapper) {
+ function triggerSummaryUpdate(group) {
+  const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
+  const pickup = group.querySelector("input[type='datetime-local']")?.value;
+  const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
+  const summary = group.querySelector(".summaryText");
+  const orders = [...group.querySelectorAll(".orderCard")];
+  const payCol = grid[6].findIndex(v => v === pay);
+
+  const dealMap = {};
+  for (let i = 2; i <= 9; i++) {
+    const code = grid[i][0];
+    if (!code) continue;
+    dealMap[code] = {
+      qty: parseInt(grid[i][1]),
+      price: parseInt(grid[i][2]),
+      methods: (grid[i][3] || "").split("、")
+    };
+  }
+
+  const itemMap = {}, countMap = {};
+  let total = 0, count = 0;
+
+  orders.forEach(order => {
+    const sel = order.querySelectorAll("select");
+    const a = sel[0]?.value.trim();
+    let b1 = sel[1]?.value.trim();
+    let b2 = sel[2]?.style.display !== "none" ? sel[2]?.value.trim() : "";
+    const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
+    if (!a || (!b1 && !b2)) return;
+
+    if (a === "雞蛋糕") {
+      if (!b1 && b2) b1 = b2;
+      if (!b2 && b1) b2 = b1;
+    }
+
+    const parts = [b1, b2].filter(Boolean).sort();
+    const short = parts.map(p => {
+      const row = grid.find(r => r[0] === a && r[1] === p);
+      return row?.[2] || p;
+    }).join("+");
+
+    const extras = [...order.querySelectorAll(".extraGrid select")].map(s => s.value.trim()).filter(Boolean);
+    const extText = extras.length ? `(${extras.join("+")})` : "";
+    const label = short + extText;
+    const key = `${a}|${short}|${extText}`;
+
+    const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
+    const dCodes = rows.map(r => r?.[3]).filter(Boolean);
+    const matchedCode = dCodes.find(code => grid.slice(1, 9).some(r => r[0] === code));
+    const matchedRow = matchedCode ? grid.find(r => r[0] === matchedCode) : null;
+    const deal = matchedRow && dealMap[matchedCode];
+    const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
+    const unitPrice = prices.reduce((a, b) => a + b, 0);
+
+    let subtotal = 0;
+    if (a !== "雞蛋糕" && deal && deal.methods.includes(pay)) {
+      const { qty: dealQty, price: dealPrice } = deal;
+      const full = Math.floor(qty / dealQty);
+      const rest = qty % dealQty;
+      const std = prices[0] || 0;
+      subtotal = full * dealPrice + rest * std;
+    } else {
+      subtotal = unitPrice * qty;
+    }
+
+    total += subtotal;
+    if (a !== "包裝") count += qty;
+    countMap[a] = (countMap[a] || 0) + qty;
+
+    if (!itemMap[key]) {
+      itemMap[key] = { label, qty, total: a === "雞蛋糕" ? qty * 2 : qty };
+    } else {
+      itemMap[key].qty += qty;
+      itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
+    }
+  });
+
+  const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
+  const items = Object.entries(itemMap).sort((a, b) => {
+    const na = a[0].split("|")[0], nb = b[0].split("|")[0];
+    return (seq[na] ?? 99) - (seq[nb] ?? 99);
+  });
+
+  const line1 = Object.entries(seq).filter(([k]) => countMap[k]).map(([k]) => `${k}${countMap[k]}份`).join("；") + `，共 ${count} 份`;
+  const line2 = [`共 ${total} 元`];
+  if (delivery) line2.push(delivery);
+  if (pickup) {
+    const dt = new Date(pickup);
+    if (!isNaN(dt)) {
+      const y = dt.getFullYear(), m = dt.getMonth() + 1, d = dt.getDate();
+      const h = dt.getHours(), mi = String(dt.getMinutes()).padStart(2, "0");
+      line2.push(`${delivery ? "送達" : "取餐"}時間 ${y}/${m}/${d}/${h}:${mi}`);
+    }
+  }
+  const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
+  summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
+}
+
+function addOrderBlock(wrapper) {
   const card = document.createElement("div");
   card.className = "orderCard";
-
-  const left = document.createElement("div");
-  left.className = "orderLeft";
 
   const title = document.createElement("div");
   title.className = "orderTitle";
   const label = document.createElement("span");
   label.textContent = "第 X 組訂單";
   const del = document.createElement("button");
-  del.className = "btn del";
   del.textContent = "❌";
+  del.className = "btn del";
   del.onclick = () => {
-    if (confirm("確定刪除此訂單？")) {
+    if (confirm("刪除此訂單？")) {
       card.remove();
       updateOrderNumbers(wrapper);
       const group = card.closest(".groupCard");
@@ -390,39 +470,50 @@ function addCustomerCard() {
     }
   };
   title.append(label, del);
+  card.appendChild(title);
 
-  const row1 = document.createElement("div");
-  row1.className = "rowLine";
+  const rowTop = document.createElement("div");
+  rowTop.className = "rowLine";
+
   const a = document.createElement("select");
-  a.innerHTML = `<option value="">A</option>`;
-  new Set(grid.slice(10).map(r => r?.[0]).filter(Boolean)).forEach(v => {
+  a.innerHTML = `<option value="">請選擇 A</option>`;
+  new Set(grid.slice(10, 106).map(r => r?.[0]).filter(Boolean)).forEach(v => {
     const o = document.createElement("option");
-    o.textContent = o.value = v;
+    o.value = o.textContent = v;
     a.appendChild(o);
   });
+  markInvalid(a);
 
   const qty = document.createElement("input");
   qty.type = "number";
-  qty.value = "1";
   qty.min = "1";
+  qty.value = "1";
   qty.style.width = "60px";
+  markInvalid(qty);
 
-  const row2 = document.createElement("div");
-  row2.className = "rowLine";
+  rowTop.append(a, qty);
+  card.appendChild(rowTop);
+
+  const rowMid = document.createElement("div");
+  rowMid.className = "rowLine";
+
   const b1 = document.createElement("select");
-  b1.innerHTML = `<option value="">B</option>`;
+  b1.innerHTML = `<option value="">請選擇 B</option>`;
+  markInvalid(b1);
+
   const b2 = document.createElement("select");
-  b2.innerHTML = `<option value="">C</option>`;
+  b2.innerHTML = `<option value="">請選擇 C</option>`;
   b2.style.display = "none";
+  markInvalid(b2);
+
+  rowMid.append(b1, b2);
+  card.appendChild(rowMid);
 
   const extraRow = document.createElement("div");
   extraRow.className = "extraGrid";
+  card.appendChild(extraRow);
 
-  const log = document.createElement("div");
-  log.className = "logOutput";
-  log.textContent = "🧾 尚未分析";
-
-  const refresh = () => {
+  const update = () => {
     markInvalidAll();
     const group = card.closest(".groupCard");
     if (group) triggerSummaryUpdate(group);
@@ -433,161 +524,60 @@ function addCustomerCard() {
     const matched = grid.filter(r => r?.[0]?.trim() === val);
     const bSet = new Set(matched.map(r => r?.[1]).filter(Boolean));
 
-    b1.innerHTML = `<option value="">B</option>`;
-    b2.innerHTML = `<option value="">C</option>`;
+    b1.innerHTML = `<option value="">請選擇 B</option>`;
     [...bSet].forEach(v => {
-      const o1 = document.createElement("option");
-      o1.textContent = o1.value = v;
-      b1.appendChild(o1);
-      const o2 = document.createElement("option");
-      o2.textContent = o2.value = v;
-      b2.appendChild(o2);
-    });
-
-    b2.style.display = val === "雞蛋糕" ? "inline-block" : "none";
-    extraRow.innerHTML = "";
-    refresh();
-  });
-
-  b1.addEventListener("change", () => {
-    const valA = a.value.trim();
-    const valB = b1.value.trim();
-    const row = grid.find(r => r?.[0]?.trim() === valA && r?.[1]?.trim() === valB);
-    const opts = row?.slice(5, 15).filter(Boolean) || [];
-
-    extraRow.innerHTML = "";
-    opts.forEach((v, i) => {
-      const sel = document.createElement("select");
-      sel.innerHTML = `<option value="">附${i + 1}</option>`;
       const o = document.createElement("option");
-      o.textContent = o.value = v;
-      sel.appendChild(o);
-      sel.addEventListener("change", refresh);
-      extraRow.appendChild(sel);
+      o.value = o.textContent = v;
+      b1.appendChild(o);
     });
 
-    refresh();
-  });
-
-  [a, b1, b2, qty].forEach(el => el.addEventListener("change", refresh));
-
-  row1.append(a, qty);
-  row2.append(b1, b2);
-  left.append(title, row1, row2, extraRow);
-  card.append(left, log);
-  wrapper.appendChild(card);
-  updateOrderNumbers(wrapper);
-  refresh();
-}
-  function addOrderBlock(wrapper) {
-  const card = document.createElement("div");
-  card.className = "orderCard";
-
-  const left = document.createElement("div");
-  left.className = "orderLeft";
-
-  const title = document.createElement("div");
-  title.className = "orderTitle";
-  const label = document.createElement("span");
-  label.textContent = "第 X 組訂單";
-  const del = document.createElement("button");
-  del.className = "btn del";
-  del.textContent = "❌";
-  del.onclick = () => {
-    if (confirm("確定刪除此訂單？")) {
-      card.remove();
-      updateOrderNumbers(wrapper);
-      const group = card.closest(".groupCard");
-      if (group) triggerSummaryUpdate(group);
+    if (val === "雞蛋糕") {
+      b2.style.display = "inline-block";
+      b2.innerHTML = `<option value="">請選擇 C</option>`;
+      [...bSet].forEach(v => {
+        const o = document.createElement("option");
+        o.value = o.textContent = v;
+        b2.appendChild(o);
+      });
+    } else {
+      b2.style.display = "none";
     }
-  };
-  title.append(label, del);
 
-  const row1 = document.createElement("div");
-  row1.className = "rowLine";
-  const a = document.createElement("select");
-  a.innerHTML = `<option value="">A</option>`;
-  new Set(grid.slice(10).map(r => r?.[0]).filter(Boolean)).forEach(v => {
-    const o = document.createElement("option");
-    o.textContent = o.value = v;
-    a.appendChild(o);
-  });
-
-  const qty = document.createElement("input");
-  qty.type = "number";
-  qty.value = "1";
-  qty.min = "1";
-  qty.style.width = "60px";
-
-  const row2 = document.createElement("div");
-  row2.className = "rowLine";
-  const b1 = document.createElement("select");
-  b1.innerHTML = `<option value="">B</option>`;
-  const b2 = document.createElement("select");
-  b2.innerHTML = `<option value="">C</option>`;
-  b2.style.display = "none";
-
-  const extraRow = document.createElement("div");
-  extraRow.className = "extraGrid";
-
-  const log = document.createElement("div");
-  log.className = "logOutput";
-  log.textContent = "🧾 尚未分析";
-
-  const refresh = () => {
-    markInvalidAll();
-    const group = card.closest(".groupCard");
-    if (group) triggerSummaryUpdate(group);
-  };
-
-  a.addEventListener("change", () => {
-    const val = a.value.trim();
-    const matched = grid.filter(r => r?.[0]?.trim() === val);
-    const bSet = new Set(matched.map(r => r?.[1]).filter(Boolean));
-
-    b1.innerHTML = `<option value="">B</option>`;
-    b2.innerHTML = `<option value="">C</option>`;
-    [...bSet].forEach(v => {
-      const o1 = document.createElement("option");
-      o1.textContent = o1.value = v;
-      b1.appendChild(o1);
-      const o2 = document.createElement("option");
-      o2.textContent = o2.value = v;
-      b2.appendChild(o2);
-    });
-
-    b2.style.display = val === "雞蛋糕" ? "inline-block" : "none";
-    extraRow.innerHTML = "";
-    refresh();
+        extraRow.innerHTML = "";
+    update();
   });
 
   b1.addEventListener("change", () => {
     const valA = a.value.trim();
     const valB = b1.value.trim();
     const row = grid.find(r => r?.[0]?.trim() === valA && r?.[1]?.trim() === valB);
-    const opts = row?.slice(5, 15).filter(Boolean) || [];
+    if (!row) return;
 
+    const opts = row.slice(5, 15).map(v => v?.trim()).filter(Boolean);
     extraRow.innerHTML = "";
-    opts.forEach((v, i) => {
-      const sel = document.createElement("select");
-      sel.innerHTML = `<option value="">附${i + 1}</option>`;
-      const o = document.createElement("option");
-      o.textContent = o.value = v;
-      sel.appendChild(o);
-      sel.addEventListener("change", refresh);
-      extraRow.appendChild(sel);
-    });
 
-    refresh();
+    for (let i = 1; i <= 8; i++) {
+      const sel = document.createElement("select");
+      sel.innerHTML = `<option value="">附${i}</option>`;
+      opts.forEach(v => {
+        const o = document.createElement("option");
+        o.textContent = o.value = v;
+        sel.appendChild(o);
+      });
+      sel.addEventListener("change", update);
+      markInvalid(sel);
+      extraRow.appendChild(sel);
+    }
+
+    update();
   });
 
-  [a, b1, b2, qty].forEach(el => el.addEventListener("change", refresh));
+  [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
 
-  row1.append(a, qty);
-  row2.append(b1, b2);
-  left.append(title, row1, row2, extraRow);
-  card.append(left, log);
   wrapper.appendChild(card);
   updateOrderNumbers(wrapper);
-  refresh();
+  update();
 }
+</script>
+</body>
+</html>
