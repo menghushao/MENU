@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.12</title>
+  <title>📦 多客人訂單系統 V1.9.13</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -119,7 +119,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.12</h2>
+  <h2>📋 多客人訂單系統 V1.9.13</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -366,7 +366,7 @@ function markInvalidAll() {
     const code = grid[i][0];
     if (!code) continue;
     dealMap[code] = {
-      qty: parseInt(grid[i][1]),
+      qty: parseInt(grid[i][1]), // ✅ B 欄：顆數門檻（不再當成「組數」）
       price: parseInt(grid[i][2]),
       methods: (grid[i][3] || "").split("、").map(s => s.trim()),
       row: i
@@ -428,8 +428,7 @@ function markInvalidAll() {
       return `C${rIdx}="${p}" ➜ D${rIdx}="${row?.[3] || '無'}"`;
     }).join("，");
     log += `2️⃣ 組合明細 ➜ ${coordPart}\n`;
-
-    const unitCount = parts.length * qty;
+        const unitCount = parts.length * qty;
 
     if (matchedCode && deal) {
       tagCount[matchedCode] = (tagCount[matchedCode] || 0) + unitCount;
@@ -438,7 +437,7 @@ function markInvalidAll() {
       const remain = totalCount % deal.qty;
 
       log += `3️⃣ 找到代碼 "${matchedCode}" ➜ 對應 A${matchedRow}\n`;
-      log += `4️⃣ 特價條件 ➜ B${matchedRow}=${deal.qty}、C${matchedRow}=${deal.price}、D${matchedRow}=${deal.methods.join("、")}\n`;
+      log += `4️⃣ 特價條件 ➜ 需滿 ${deal.qty} 顆，金額 ${deal.price} 元，付款類型：${deal.methods.join("、")}\n`;
       log += `5️⃣ 累積 "${matchedCode}" 顆數 ➜ ${totalCount} ➜ 可湊 ${groupCount} 組，餘 ${remain} 顆\n`;
 
       if (!deal.methods.includes(pay)) {
@@ -452,7 +451,7 @@ function markInvalidAll() {
         log += `7️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
       } else if (totalCount < deal.qty) {
         subtotal = unitPrice * qty;
-        log += `6️⃣ 組數未達 ➜ 當前僅 ${totalCount} 顆，需滿 ${deal.qty} 顆 ➜ fallback 原價\n`;
+        log += `6️⃣ 數量未滿 ➜ B 欄為 ${deal.qty} 顆，當前僅 ${totalCount} 顆 ➜ fallback 原價\n`;
         parts.forEach((p, i) => {
           const rIdx = rowIndexes[i];
           const price = prices[i] || 0;
@@ -496,7 +495,7 @@ function markInvalidAll() {
       itemMap[key] = { label, qty, total: a === "雞蛋糕" ? qty * 2 : qty };
     } else {
       itemMap[key].qty += qty;
-            itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
+      itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
     }
   });
 
