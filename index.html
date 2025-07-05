@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.30</title>
+  <title>📦 多客人訂單系統 V1.9.31</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -124,7 +124,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.30</h2>
+  <h2>📋 多客人訂單系統 V1.9.31</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -375,7 +375,7 @@ function readyToAddInitialCard() {
       card.remove();
       requestAnimationFrame(() => {
         updateCustomerNumbers();
-        triggerSummaryUpdate(card);
+        setTimeout(() => triggerSummaryUpdate(card), 0);
       });
     }
   };
@@ -455,9 +455,7 @@ function readyToAddInitialCard() {
 
   const refresh = () => {
     markInvalidAll();
-    requestAnimationFrame(() => {
-      triggerSummaryUpdate(card);
-    });
+    requestAnimationFrame(() => triggerSummaryUpdate(card));
   };
 
   [state, source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk.querySelector("input")].forEach(el =>
@@ -503,7 +501,7 @@ function readyToAddInitialCard() {
   requestAnimationFrame(() => {
     updateOrderNumbers(orderBox);
     triggerSummaryUpdate(card);
-    updateCustomerNumbers(); // 確保第 X 組客人正確呈現
+    updateCustomerNumbers();
   });
 }function addOrderBlock(wrapper) {
   const card = document.createElement("div");
@@ -528,7 +526,7 @@ function readyToAddInitialCard() {
       requestAnimationFrame(() => {
         updateOrderNumbers(wrapper);
         const group = card.closest(".groupCard");
-        if (group) triggerSummaryUpdate(group);
+        if (group) setTimeout(() => triggerSummaryUpdate(group), 0);
       });
     }
   };
@@ -650,8 +648,10 @@ function readyToAddInitialCard() {
   [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
 
   wrapper.appendChild(card);
-  updateOrderNumbers(wrapper);
-  update();
+  requestAnimationFrame(() => {
+    updateOrderNumbers(wrapper);
+    update();
+  });
 }
 </script>
 </body>
