@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.24</title>
+  <title>📦 多客人訂單系統 V1.9.25</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -66,7 +66,7 @@
 
     .orderCard {
       flex: 0 0 auto;
-      width: 256px; /* ⬅️ 第③項：原320px縮小20% */
+      width: 256px;
       border: 1px solid #999;
       padding: 10px;
       background: #fcfcfc;
@@ -117,13 +117,14 @@
       padding: 4px 8px;
       font-size: 13px;
       cursor: pointer;
+      z-index: 9999; /* ✅ 第①項修復：確保不被其他元件遮住 */
     }
   </style>
 </head>
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.24</h2>
+  <h2>📋 多客人訂單系統 V1.9.25</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -157,8 +158,7 @@
 
 <div id="container"></div>
 <div id="loader">🔐 資料載入中...</div>
-<button id="logoutBtn">🔓 登出金鑰</button>
-<script>
+<button id="logoutBtn">🔓 登出金鑰</button><script>
 const TAG = "entry-token";
 let grid = [], customerCount = 0;
 
@@ -177,12 +177,11 @@ function markInvalidAll() {
   document.querySelectorAll("select, input[type='text'], input[type='number'], input[type='datetime-local']").forEach(markInvalid);
 }
 
-// ✅ 修復新增客人功能失效（交辦第⑧項）
 function readyToAddInitialCard() {
   const btn = document.getElementById("addCustomerBtn");
   if (btn && typeof addCustomerCard === "function") {
     btn.onclick = () => addCustomerCard();
-    addCustomerCard(); // 初次載入自動加入第一組
+    addCustomerCard();
   } else {
     setTimeout(readyToAddInitialCard, 100);
   }
@@ -225,13 +224,12 @@ function readyToAddInitialCard() {
     if (!Array.isArray(grid) || grid.length < 10) throw new Error("❌ 解密成功但資料格式異常");
 
     document.getElementById("loader").style.display = "none";
-    readyToAddInitialCard(); // ✅ 啟動新增客人初始化
+    readyToAddInitialCard(); // ✅ 初始化並綁定按鈕
   } catch (err) {
     console.error("❌ 資料載入錯誤", err);
     document.getElementById("loader").textContent = "❌ 載入失敗，請檢查金鑰與資料來源";
   }
-})();
-  function triggerSummaryUpdate(group) {
+})();function triggerSummaryUpdate(group) {
   const selects = group.querySelectorAll("select");
   const source = selects[0]?.value.trim(); // 顧客來源
   const orderNo = group.querySelector("input[placeholder='填入單號']")?.value.trim();
@@ -241,21 +239,26 @@ function readyToAddInitialCard() {
   const adjustVal = parseFloat(group.querySelector("input[placeholder='金額調整']")?.value || "0");
   const summary = group.querySelector(".summaryText");
   const orders = [...group.querySelectorAll(".orderCard")];
-  const payCol = grid[6].findIndex(v => v === pay);
 
-  const payNameRow = grid[6]?.slice(15, 32);
-  const payIndex = payNameRow?.findIndex(v => v === pay);
-  const ratioRow = grid[8];
+  const payCol = grid[6].findIndex(v => v === pay); // ✅ 第⑤項：正確抓欄位索引
+  const payHeaders = grid[6]?.slice(15, 32) || [];
+  const payIndex = payHeaders.findIndex(v => v === pay);
+  const ratioRow = grid[8] || [];
   const payRatio = payIndex >= 0 ? parseFloat(ratioRow[15 + payIndex]) || 1 : 1;
 
-  // 🧮 抓 E2~E9 為排序順序、F2~F9 為份數定義（第⑤、第⑥項）
-  const seqKeys = grid.slice(1, 9).map(r => r[4]?.trim()).filter(Boolean);   // E2~E9
-  const seqUnits = grid.slice(1, 9).map(r => parseInt(r[5]) || 0);           // F2~F9
+  const nameMap = {}; // ✅ 建立全名→簡稱對照（用於第③項）
+  grid.slice(10, 106).forEach(r => {
+    const full = r?.[1]?.trim();
+    const short = r?.[2]?.trim();
+    if (full && short) nameMap[full] = short;
+  });
 
-  const unitMap = {}, sortOrder = {};
-  seqKeys.forEach((k, i) => {
-    unitMap[k] = seqUnits[i];     // 份數單位
-    sortOrder[k] = i;             // 顯示順序
+  const sortKeys = grid.slice(1, 9).map(r => r?.[4]?.trim()).filter(Boolean);
+  const unitKeys = grid.slice(1, 9).map(r => parseInt(r?.[5]) || 0);
+  const sortOrder = {}, unitMap = {};
+  sortKeys.forEach((k, i) => {
+    sortOrder[k] = i;
+    unitMap[k] = unitKeys[i];
   });
 
   const itemMap = {}, countMap = {}, eggCount = {};
@@ -263,7 +266,7 @@ function readyToAddInitialCard() {
 
   orders.forEach(order => {
     const sel = order.querySelectorAll("select");
-    const a = sel[0]?.value.trim(); // 品類
+    const a = sel[0]?.value.trim();
     let b1 = sel[1]?.value.trim();
     let b2 = sel[2]?.style.display !== "none" ? sel[2]?.value.trim() : "";
     const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
@@ -274,18 +277,19 @@ function readyToAddInitialCard() {
       if (!b2 && b1) b2 = b1;
     }
 
-    const parts = [b1, b2].filter(Boolean).sort();
+    const fullParts = [b1, b2].filter(Boolean).sort();
+    const parts = fullParts.map(p => nameMap[p] || p); // ✅ 將全名轉成簡稱（第③項）
     const extras = [...order.querySelectorAll(".extraGrid select")].map(s => s.value.trim()).filter(Boolean);
     const extText = extras.length ? `(${extras.join("+")})` : "";
     const label = parts.join("+") + extText;
     const key = `${a}|${parts.join("+")}|${extText}`;
 
-    const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
+    const rows = fullParts.map(p => grid.find(r => r[0] === a && r[1] === p));
     const payVals = rows.map(r => parseFloat(r?.[payCol]) || 0);
     let subtotal = payVals.reduce((a, b) => a + b, 0) * qty;
 
     const costText = order.querySelector(".costText");
-    if (costText) costText.textContent = `小計 ${subtotal} 元`;
+    if (costText) costText.textContent = `小計 ${subtotal} 元`; // ✅ 第②項：顯示訂單小計
 
     total += subtotal;
     countMap[a] = (countMap[a] || 0) + qty;
@@ -300,23 +304,20 @@ function readyToAddInitialCard() {
     return (sortOrder[na] ?? 999) - (sortOrder[nb] ?? 999);
   });
 
-  const parts = Object.keys(countMap).sort((a, b) => (sortOrder[a] ?? 999) - (sortOrder[b] ?? 999)).map(k => {
-    const unit = unitMap[k];
-    const totalQty = eggCount[k] || countMap[k];
-    const count = unit > 0 && totalQty % unit === 0 ? totalQty / unit : Math.floor(totalQty / (unit || 1));
-    const label = unit === 0
-      ? `${k}${totalQty}份`               // 不計入總份數
-      : totalQty % unit === 0
-        ? `${k}${count}份`
-        : `${k}不足份`;
-    return { label, count: unit === 0 ? 0 : count, k };
-  });
+  const partList = Object.keys(countMap).sort((a, b) => (sortOrder[a] ?? 999) - (sortOrder[b] ?? 999))
+    .map(k => {
+      const unit = unitMap[k] || 0;
+      const totalQty = eggCount[k] || countMap[k];
+      const count = unit > 0 ? Math.floor(totalQty / unit) : 0;
+      const label = unit > 0
+        ? (totalQty % unit === 0 ? `${k}${count}份` : `${k}不足份`)
+        : `${k}${totalQty}份`;
+      return { label, count, k, totalQty, unit };
+    });
 
-  const totalPortion = parts.reduce((sum, p) => sum + p.count, 0);
-
-  // 🧾 第⑨項：摘要開頭格式
+  const totalPortion = partList.reduce((sum, p) => p.unit > 0 ? sum + p.count : sum, 0);
   const prefix = `${source || ""}${source === "Ｕber Eats" && orderNo ? " " + orderNo : ""}${(source || orderNo) && pay ? " 以 " : ""}${pay ? pay + " 支付 " : ""}`;
-  const line1 = prefix + parts.map(p => p.label).join("；") + `，共 ${totalPortion} 份`;  const totalBefore = total;
+  const line1 = prefix + partList.map(p => p.label).join("；") + `，共 ${totalPortion} 份`;  const totalBefore = total;
   const totalAfterRatio = totalBefore * payRatio;
   const finalTotal = Math.round((totalAfterRatio + adjustVal) * 1) / 1;
 
@@ -351,7 +352,7 @@ function readyToAddInitialCard() {
     if (confirm("確定刪除此客人？")) {
       card.remove();
       updateCustomerNumbers();
-      triggerSummaryUpdate(card); // ✅ 第⑦項即時刷新摘要
+      triggerSummaryUpdate(card); // ✅ 第⑥項修正：即時刷新訂單資訊
     }
   };
 
@@ -431,7 +432,7 @@ function readyToAddInitialCard() {
 
   const refresh = () => {
     markInvalidAll();
-    triggerSummaryUpdate(card); // 每次變動都刷新摘要資訊
+    triggerSummaryUpdate(card); // ✅ 所有欄位變動皆刷新摘要
   };
 
   [state, source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk.querySelector("input")].forEach(el =>
@@ -466,7 +467,7 @@ function readyToAddInitialCard() {
   addOrderBtn.onclick = () => {
     addOrderBlock(orderBox);
     updateOrderNumbers(orderBox);
-    triggerSummaryUpdate(card);
+    triggerSummaryUpdate(card); // ✅ 新增時立即刷新摘要
   };
   card.appendChild(addOrderBtn);
 
@@ -486,7 +487,7 @@ function readyToAddInitialCard() {
   label.textContent = "第 X 組訂單";
 
   const cost = document.createElement("span");
-  cost.className = "costText"; // ✅ 第②項：訂單小計
+  cost.className = "costText";
   cost.textContent = "";
 
   const del = document.createElement("button");
@@ -497,7 +498,7 @@ function readyToAddInitialCard() {
       card.remove();
       updateOrderNumbers(wrapper);
       const group = card.closest(".groupCard");
-      if (group) triggerSummaryUpdate(group); // ✅ 第⑦項：即時刷新摘要
+      if (group) triggerSummaryUpdate(group); // ✅ 第⑥項：即時更新摘要
     }
   };
 
@@ -527,16 +528,16 @@ function readyToAddInitialCard() {
   card.appendChild(rowTop);
 
   const rowMid = document.createElement("div");
-  rowMid.className = "rowLine";
+  rowMid.className = "rowLine"; // ✅ 第②項：同列容器
 
   const b1 = document.createElement("select");
   b1.innerHTML = `<option value="">請選擇 B</option>`;
-  b1.style.flex = "1 1 45%"; // ✅ 第③項：縮小 20%
+  b1.style.flex = "1 1 45%";
   markInvalid(b1);
 
   const b2 = document.createElement("select");
   b2.innerHTML = `<option value="">請選擇 C</option>`;
-  b2.style.flex = "1 1 45%"; // ✅ 第③項：縮小 20%
+  b2.style.flex = "1 1 45%";
   b2.style.display = "none";
   markInvalid(b2);
 
