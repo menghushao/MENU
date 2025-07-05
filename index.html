@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.14</title>
+  <title>📦 多客人訂單系統 V1.9.15</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -117,8 +117,9 @@
   </style>
 </head>
 <body>
+
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.14</h2>
+  <h2>📋 多客人訂單系統 V1.9.15</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 </div>
 
@@ -220,7 +221,7 @@ function triggerSummaryUpdate(group) {
       row: i
     };
   }
-  const validCodes = Object.keys(dealMap);
+  const validCodes = Object.keys(dealMap).map(code => code.trim());
 
   const itemMap = {}, countMap = {}, tagCount = {};
   let total = 0, count = 0;
@@ -262,29 +263,32 @@ function triggerSummaryUpdate(group) {
     const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
     const rowIndexes = parts.map(p => grid.findIndex(r => r[0] === a && r[1] === p));
     const dCodes = rows.map(r => r?.[3]?.trim()).filter(Boolean);
-    const matchedCode = dCodes.find(code => !!code);
+    const matchedCode = dCodes.find(code => !!code)?.trim();
     const matchedRow = matchedCode ? grid.findIndex(r => r[0]?.trim() === matchedCode) : -1;
     const deal = matchedCode ? dealMap[matchedCode] : null;
     const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
     const unitPrice = prices.reduce((a, b) => a + b, 0);
-        let subtotal = 0, log = `🧾 觀察歷程：\n`;
+        let subtotal = 0;
+    const rawCodes = grid.slice(2, 10).map(r => r?.[0]);
+    const trimmedCodes = rawCodes.map(v => v?.trim() || "");
+    const readableCodes = trimmedCodes.map(v => v ? v : "空的").join(", ");
+    let log = `🧾 觀察歷程：\n`;
     log += `1️⃣ 商品 ➜ ${a}＋${short} ×${qty} 組 ➜ 付款：「${pay}」\n`;
-
-    const coordPart = parts.map((p, i) => {
-      const row = rows[i];
+    log += `2️⃣ 組合明細 ➜ ${parts.map((p, i) => {
       const rIdx = rowIndexes[i];
-      return `C${rIdx}="${p}" ➜ D${rIdx}="${row?.[3]?.trim() || '無'}"`;
-    }).join("，");
-    log += `2️⃣ 組合明細 ➜ ${coordPart}\n`;
+      return `C${rIdx}="${p}" ➜ D${rIdx}="${rows[i]?.[3]?.trim() || '無'}"`;
+    }).join("，")}\n`;
+    log += `🔎 檢查特價代碼區段 ➜ Grid[A2~A9] = [${readableCodes}]\n`;
 
     const unitCount = parts.length * qty;
 
     if (matchedCode) {
       log += `3️⃣ 抓到代碼 "${matchedCode}" ➜ 出現在 D 欄\n`;
 
-      if (!validCodes.includes(matchedCode)) {
+      const isValidCode = validCodes.includes(matchedCode.trim());
+      if (!isValidCode) {
         subtotal = unitPrice * qty;
-        log += `4️⃣ 但代碼 "${matchedCode}" 未出現在 Grid[A2~A9] ➜ 非有效特價代碼\n`;
+        log += `4️⃣ 代碼 "${matchedCode}" 未出現在 Grid[A2~A9] ➜ 非有效特價代碼\n`;
         log += `5️⃣ fallback 原價如下：\n`;
         parts.forEach((p, i) => {
           const rIdx = rowIndexes[i];
@@ -299,7 +303,7 @@ function triggerSummaryUpdate(group) {
         const groupCount = Math.floor(totalCount / deal.qty);
         const remain = totalCount % deal.qty;
 
-        log += `4️⃣ 驗證代碼 "${matchedCode}" 屬於 Grid[A${deal.row}] 有效特價代碼\n`;
+        log += `4️⃣ 確認 "${matchedCode}" 存在於 Grid[A${deal.row}] ➜ 有效特價代碼\n`;
         log += `5️⃣ 對應特價條件 ➜ 顆數：${deal.qty}，價格：${deal.price}，付款限制：${deal.methods.join("、")}\n`;
         log += `6️⃣ 累積 "${matchedCode}" 顆數 ➜ ${totalCount} ➜ 可湊 ${groupCount} 組，餘 ${remain} 顆\n`;
 
@@ -340,8 +344,7 @@ function triggerSummaryUpdate(group) {
       });
       log += `4️⃣ 原價總計 ➜ (${prices.join("+")}) ×${qty} = ${subtotal} 元\n`;
     }
-
-    logDiv.textContent = log;
+        logDiv.textContent = log;
 
     total += subtotal;
     if (a !== "包裝") count += qty;
@@ -354,7 +357,8 @@ function triggerSummaryUpdate(group) {
       itemMap[key].total += a === "雞蛋糕" ? qty * 2 : qty;
     }
   });
-    const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
+
+  const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
   const items = Object.entries(itemMap).sort((a, b) => {
     const na = a[0].split("|")[0], nb = b[0].split("|")[0];
     return (seq[na] ?? 99) - (seq[nb] ?? 99);
@@ -514,7 +518,7 @@ function triggerSummaryUpdate(group) {
   updateCustomerNumbers();
   triggerSummaryUpdate(card);
 }
-function addOrderBlock(wrapper) {
+  function addOrderBlock(wrapper) {
   const card = document.createElement("div");
   card.className = "orderCard";
 
