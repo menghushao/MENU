@@ -269,7 +269,7 @@ function triggerSummaryUpdate(group) {
     const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
     const unitPrice = prices.reduce((a, b) => a + b, 0);
         let subtotal = 0;
-    const rawCodes = grid.slice(2, 10).map(r => r?.[0]);
+    const rawCodes = grid.slice(1, 9).map(r => r?.[0]);
     const trimmedCodes = rawCodes.map(v => v?.trim() || "");
     const readableCodes = trimmedCodes.map(v => v ? v : "空的").join(", ");
     let log = `🧾 觀察歷程：\n`;
