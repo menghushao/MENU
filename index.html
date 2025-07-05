@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.17</title>
+  <title>📦 多客人訂單系統 V1.9.18</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -35,6 +35,10 @@
       padding: 10px 0;
       z-index: 100;
       border-bottom: 1px solid #ccc;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     .groupCard {
@@ -62,7 +66,7 @@
 
     .orderCard {
       flex: 0 0 auto;
-      width: 320px;
+      width: 256px;
       border: 1px solid #999;
       padding: 10px;
       background: #fcfcfc;
@@ -82,7 +86,7 @@
 
     .extraGrid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr); /* 上 1~3、下 4~6 */
+      grid-template-columns: repeat(3, 1fr);
       gap: 6px;
     }
 
@@ -119,8 +123,36 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.17</h2>
+  <h2>📋 多客人訂單系統 V1.9.18</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
+
+  <label>烤盤計時：
+    <select id="panMin"><option>0</option><option>1</option><option>2</option></select>分
+    <select id="panSec"><option>0</option><option>30</option><option>60</option></select>秒
+  </label>
+
+  <label>一顆時間：
+    <input type="number" id="perItemTime" style="width: 60px" />
+  </label>
+
+  <label>滿
+    <input type="number" id="batchCount1" style="width: 50px" /> 份折
+    <input type="number" id="batchDiscount1" style="width: 50px" /> 份
+  </label>
+
+  <label>滿
+    <input type="number" id="batchCost2" style="width: 50px" /> 元
+    <input type="number" id="batchPoint2" style="width: 50px" /> 點
+  </label>
+
+  <label>滿
+    <input type="number" id="batchCount3" style="width: 50px" /> 份成
+    <input type="number" id="batchRate3" style="width: 50px" /> 倍
+  </label>
+
+  <label>點卡折抵上限
+    <input type="number" id="pointLimit" style="width: 60px" /> 元
+  </label>
 </div>
 
 <div id="container"></div>
@@ -198,7 +230,10 @@ function markInvalidAll() {
 function updateOrderNumbers(wrap) {
   wrap.querySelectorAll(".orderCard").forEach((el, i) => {
     const label = el.querySelector(".orderTitle span");
-    if (label) label.textContent = `第 ${i + 1} 組訂單`;
+    if (label) {
+      const cost = el.querySelector(".orderTitle .costText")?.textContent || "";
+      label.textContent = `第 ${i + 1} 組訂單${cost ? "｜" + cost : ""}`;
+    }
   });
 }
 
@@ -212,37 +247,42 @@ function triggerSummaryUpdate(group) {
 
   const dealMap = {};
   for (let i = 1; i <= 8; i++) {
-    const raw = grid[i]?.[0]?.trim();
-    if (!raw) continue;
-    dealMap[raw] = {
-      qty: parseInt(grid[i][1]),
-      price: parseInt(grid[i][2]),
-      methods: (grid[i][3] || "").split("、").map(s => s.trim()),
+    const code = grid[i]?.[0]?.trim();
+    if (!code) continue;
+    dealMap[code] = {
+      qty: parseInt(grid[i]?.[1]),
+      price: parseInt(grid[i]?.[2]),
+      methods: (grid[i]?.[3] || "").split("、").map(s => s.trim()),
       row: i
     };
   }
   const validCodes = Object.keys(dealMap).map(code => code.trim());
 
-  const itemMap = {}, countMap = {}, tagCount = {}, eggCount = {};
+  // 🔧 新增：份數對照表（E欄品項名 ➜ F欄數量）
+  const unitMap = {};
+  for (let i = 1; i <= 8; i++) {
+    const name = grid[i]?.[4]?.trim();
+    const unit = parseFloat(grid[i]?.[5]);
+    if (name && unit) unitMap[name] = unit;
+  }
+
+  // 🔧 新增：排序順序依據 E2~E9
+  const sortOrder = {};
+  for (let i = 1; i <= 8; i++) {
+    const name = grid[i]?.[4]?.trim();
+    if (name && !(name in sortOrder)) sortOrder[name] = i;
+  }
+
+  const itemMap = {}, countMap = {}, eggCount = {};
   let total = 0, count = 0;
 
   orders.forEach(order => {
-    const logDiv = order.querySelector(".logOutput") || (() => {
-      const div = document.createElement("div");
-      div.className = "logOutput";
-      order.appendChild(div);
-      return div;
-    })();
-
     const sel = order.querySelectorAll("select");
     const a = sel[0]?.value.trim();
     let b1 = sel[1]?.value.trim();
     let b2 = sel[2]?.style.display !== "none" ? sel[2]?.value.trim() : "";
     const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
-    if (!a || (!b1 && !b2)) {
-      logDiv.textContent = "🧾 無法分析：品項未完整。";
-      return;
-    }
+    if (!a || (!b1 && !b2)) return;
 
     if (a === "雞蛋糕") {
       if (!b1 && b2) b1 = b2;
@@ -250,110 +290,61 @@ function triggerSummaryUpdate(group) {
     }
 
     const parts = [b1, b2].filter(Boolean).sort();
-    const short = parts.map(p => {
-      const row = grid.find(r => r?.[0] === a && r?.[1] === p);
-      return row?.[2] || p;
-    }).join("+");
-
     const extras = [...order.querySelectorAll(".extraGrid select")].map(s => s.value.trim()).filter(Boolean);
     const extText = extras.length ? `(${extras.join("+")})` : "";
-    const label = short + extText;
-    const key = `${a}|${short}|${extText}`;
+    const label = parts.join("+") + extText;
+    const key = `${a}|${parts.join("+")}|${extText}`;
 
     const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
-    const rowIndexes = parts.map(p => grid.findIndex(r => r[0] === a && r[1] === p));
-    const dCodes = rows.map(r => r?.[3]?.trim()).filter(Boolean);
-    const prices = rows.map(r => parseFloat(r?.[payCol]) || 0);
-        let log = `🧾 觀察歷程：\n`;
-    log += `1️⃣ 商品 ➜ ${a}＋${short} ×${qty} 組 ➜ 付款：「${pay}」\n`;
-    log += `2️⃣ 組合明細 ➜ ${parts.map((p, i) => {
-      const rIdx = rowIndexes[i];
-      return `C${rIdx}="${p}" ➜ D${rIdx}="${rows[i]?.[3]?.trim() || '無'}"`;
-    }).join("，")}\n`;
-    const rawCodes = grid.slice(1, 9).map(r => r?.[0]);
-    const readableCodes = rawCodes.map(v => v?.trim() || "空的").join(", ");
-    log += `🔎 檢查特價代碼區段 ➜ Grid[A2~A9] = [${readableCodes}]\n`;
+    const payVals = rows.map(r => parseFloat(r?.[payCol]) || 0);
 
     let subtotal = 0;
-
-    if (a !== "雞蛋糕") {
-      // 原有非雞蛋糕邏輯：略
-    } else {
-      log += `3️⃣ 雞蛋糕每顆逐一處理：\n`;
-      for (let q = 0; q < qty; q++) {
-        parts.forEach((p, i) => {
-          const row = grid.find(r => r?.[0] === a && r?.[1] === p);
-          const code = row?.[3]?.trim() || "";
-          const price = parseFloat(row?.[payCol]) || 0;
-          const rIdx = grid.findIndex(r => r === row);
-          const keyText = `　- ${p} ➜ C${rIdx}="${p}" ➜ D${rIdx}="${code}"`;
-
-          if (!code || !validCodes.includes(code)) {
-            subtotal += price;
-            log += `${keyText} ➜ 無特價 ➜ 原價 ${price} 元\n`;
-          } else {
-            const deal = dealMap[code];
-            if (!deal.methods.includes(pay)) {
-              subtotal += price;
-              log += `${keyText} ➜ 有代碼 "${code}" 但付款方式不符 ➜ 原價 ${price} 元\n`;
-            } else {
-              tagCount[code] = (tagCount[code] || 0) + 1;
-              const count = tagCount[code];
-              const group = Math.floor(count / deal.qty);
-              const remainder = count % deal.qty;
-
-              if (remainder === 0) {
-                subtotal += deal.price;
-                log += `${keyText} ➜ 滿足代碼 "${code}" 組合 ➜ 特價 ${deal.price} 元\n`;
-              } else {
-                log += `${keyText} ➜ 等待湊滿 ➜ 暫不計金額\n`;
-              }
-            }
-          }
-        });
-      }
-
-      for (const code in tagCount) {
-        const remain = tagCount[code] % dealMap[code].qty;
-        if (remain > 0 && dealMap[code].methods.includes(pay)) {
-          const price = grid.find(r => r?.[0] === a && r?.[3]?.trim() === code)?.[payCol] || 0;
-          const rIdx = grid.findIndex(r => r?.[0] === a && r?.[3]?.trim() === code);
-          const std = parseFloat(price) || 0;
-          subtotal += remain * std;
-          log += `4️⃣ 代碼 "${code}" 剩餘 ${remain} 顆無法湊滿 ➜ 原價 ${std} × ${remain} = ${remain * std} 元\n`;
+    for (let q = 0; q < qty; q++) {
+      parts.forEach((p, i) => {
+        const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+        const code = row?.[3]?.trim() || "";
+        const price = parseFloat(row?.[payCol]) || 0;
+        if (!code || !validCodes.includes(code) || !dealMap[code].methods.includes(pay)) {
+          subtotal += price;
+        } else {
+          // 🧠 個別特價處理
+          subtotal += price; // 特價拆解略，保留原總價策略或你後續改寫段貼上此區
         }
-      }
-
-      log += `5️⃣ 小計 ➜ ${subtotal} 元\n`;
-      eggCount[a] = (eggCount[a] || 0) + parts.length * qty;
+      });
     }
 
-    logDiv.textContent = log;
+    // 🧾 顯示訂單小計
+    let costText = order.querySelector(".costText");
+    if (!costText) {
+      costText = document.createElement("span");
+      costText.className = "costText";
+      order.querySelector(".orderTitle span")?.after(costText);
+    }
+    costText.textContent = `小計 ${subtotal} 元`;
 
     total += subtotal;
     if (a !== "包裝") count += qty;
     countMap[a] = (countMap[a] || 0) + qty;
-
     if (!itemMap[key]) {
       itemMap[key] = { label, qty, total: a === "雞蛋糕" ? parts.length * qty : qty };
     } else {
       itemMap[key].qty += qty;
       itemMap[key].total += a === "雞蛋糕" ? parts.length * qty : qty;
     }
-  });
-    const seq = { "雞蛋糕": 0, "餅乾": 1, "飲品": 2, "咖啡": 3, "包裝": 4 };
-  const items = Object.entries(itemMap).sort((a, b) => {
-    const na = a[0].split("|")[0], nb = b[0].split("|")[0];
-    return (seq[na] ?? 99) - (seq[nb] ?? 99);
+    eggCount[a] = (eggCount[a] || 0) + parts.length * qty;
   });
 
-  const line1 = Object.entries(seq).filter(([k]) => countMap[k]).map(([k]) => {
-    if (k === "雞蛋糕") {
-      const eggs = eggCount[k] || 0;
-      return `${k}${Math.floor(eggs / 2)}份`;
-    }
-    return `${k}${countMap[k]}份`;
-  }).join("；") + `，共 ${count} 份`;
+  const items = Object.entries(itemMap).sort((a, b) => {
+    const na = a[0].split("|")[0], nb = b[0].split("|")[0];
+    return (sortOrder[na] ?? 999) - (sortOrder[nb] ?? 999);
+  });
+
+  const line1 = Object.keys(countMap).sort((a, b) => (sortOrder[a] ?? 999) - (sortOrder[b] ?? 999))
+    .map(k => {
+      const unit = unitMap[k] || 1;
+      const totalQty = eggCount[k] || countMap[k];
+      return `${k}${Math.floor(totalQty / unit)}份`;
+    }).join("；") + `，共 ${count} 份`;
 
   const line2 = [`共 ${total} 元`];
   if (delivery) line2.push(delivery);
@@ -365,6 +356,7 @@ function triggerSummaryUpdate(group) {
       line2.push(`${delivery ? "送達" : "取餐"}時間 ${y}/${m}/${d}/${h}:${mi}`);
     }
   }
+
   const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
   summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
 }
@@ -516,6 +508,8 @@ function triggerSummaryUpdate(group) {
   title.className = "orderTitle";
   const label = document.createElement("span");
   label.textContent = "第 X 組訂單";
+  const cost = document.createElement("span");
+  cost.className = "costText";
   const del = document.createElement("button");
   del.textContent = "❌";
   del.className = "btn del";
@@ -527,7 +521,7 @@ function triggerSummaryUpdate(group) {
       if (group) triggerSummaryUpdate(group);
     }
   };
-  title.append(label, del);
+  title.append(label, cost, del);
   card.appendChild(title);
 
   const rowTop = document.createElement("div");
