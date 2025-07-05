@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.18</title>
+  <title>📦 多客人訂單系統 V1.9.19</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -123,31 +123,31 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.18</h2>
+  <h2>📋 多客人訂單系統 V1.9.19</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
-    <select id="panMin"><option>0</option><option>1</option><option>2</option></select>分
-    <select id="panSec"><option>0</option><option>30</option><option>60</option></select>秒
+    <input type="number" id="panMin" style="width: 50px;" />分
+    <input type="number" id="panSec" style="width: 50px;" />秒；
   </label>
 
   <label>一顆時間：
-    <input type="number" id="perItemTime" style="width: 60px" />
+    <input type="number" id="perItemTime" style="width: 60px" />；
   </label>
 
   <label>滿
     <input type="number" id="batchCount1" style="width: 50px" /> 份折
-    <input type="number" id="batchDiscount1" style="width: 50px" /> 份
+    <input type="number" id="batchDiscount1" style="width: 50px" /> 份；
   </label>
 
   <label>滿
     <input type="number" id="batchCost2" style="width: 50px" /> 元
-    <input type="number" id="batchPoint2" style="width: 50px" /> 點
+    <input type="number" id="batchPoint2" style="width: 50px" /> 點；
   </label>
 
   <label>滿
-    <input type="number" id="batchCount3" style="width: 50px" /> 份成
-    <input type="number" id="batchRate3" style="width: 50px" /> 倍
+    <input type="number" id="batchCount3" style="width: 50px" /> 份乘
+    <input type="number" id="batchRate3" style="width: 50px" /> 倍；
   </label>
 
   <label>點卡折抵上限
@@ -241,6 +241,7 @@ function triggerSummaryUpdate(group) {
   const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
   const pickup = group.querySelector("input[type='datetime-local']")?.value;
   const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
+  const adjustVal = parseFloat(group.querySelector("input[placeholder='金額調整']")?.value || "0");
   const summary = group.querySelector(".summaryText");
   const orders = [...group.querySelectorAll(".orderCard")];
   const payCol = grid[6].findIndex(v => v === pay);
@@ -258,22 +259,20 @@ function triggerSummaryUpdate(group) {
   }
   const validCodes = Object.keys(dealMap).map(code => code.trim());
 
-  // 🔧 新增：份數對照表（E欄品項名 ➜ F欄數量）
   const unitMap = {};
   for (let i = 1; i <= 8; i++) {
     const name = grid[i]?.[4]?.trim();
     const unit = parseFloat(grid[i]?.[5]);
-    if (name && unit) unitMap[name] = unit;
+    if (name && unit > 0) unitMap[name] = unit;
   }
 
-  // 🔧 新增：排序順序依據 E2~E9
   const sortOrder = {};
   for (let i = 1; i <= 8; i++) {
     const name = grid[i]?.[4]?.trim();
     if (name && !(name in sortOrder)) sortOrder[name] = i;
   }
 
-  const itemMap = {}, countMap = {}, eggCount = {};
+  const itemMap = {}, countMap = {}, eggCount = {}, tagCount = {};
   let total = 0, count = 0;
 
   orders.forEach(order => {
@@ -296,24 +295,57 @@ function triggerSummaryUpdate(group) {
     const key = `${a}|${parts.join("+")}|${extText}`;
 
     const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
+    const rowIndexes = parts.map(p => grid.findIndex(r => r[0] === a && r[1] === p));
     const payVals = rows.map(r => parseFloat(r?.[payCol]) || 0);
 
     let subtotal = 0;
-    for (let q = 0; q < qty; q++) {
-      parts.forEach((p, i) => {
-        const row = grid.find(r => r?.[0] === a && r?.[1] === p);
-        const code = row?.[3]?.trim() || "";
-        const price = parseFloat(row?.[payCol]) || 0;
-        if (!code || !validCodes.includes(code) || !dealMap[code].methods.includes(pay)) {
-          subtotal += price;
-        } else {
-          // 🧠 個別特價處理
-          subtotal += price; // 特價拆解略，保留原總價策略或你後續改寫段貼上此區
+
+    if (a !== "雞蛋糕") {
+      const row = rows[0];
+      const code = row?.[3]?.trim();
+      const isValid = code && validCodes.includes(code);
+      if (isValid && dealMap[code].methods.includes(pay)) {
+        const deal = dealMap[code];
+        const totalCount = (tagCount[code] || 0) + parts.length * qty;
+        const groupCount = Math.floor(totalCount / deal.qty);
+        const remain = totalCount % deal.qty;
+        const stdPrice = payVals[0] || 0;
+        subtotal = groupCount * deal.price + remain * stdPrice;
+        tagCount[code] = totalCount;
+      } else {
+        subtotal = payVals.reduce((a, b) => a + b, 0) * qty;
+      }
+    } else {
+      for (let q = 0; q < qty; q++) {
+        parts.forEach((p, i) => {
+          const row = grid.find(r => r?.[0] === a && r?.[1] === p);
+          const code = row?.[3]?.trim() || "";
+          const price = parseFloat(row?.[payCol]) || 0;
+
+          if (!code || !validCodes.includes(code) || !dealMap[code].methods.includes(pay)) {
+            subtotal += price;
+          } else {
+            tagCount[code] = (tagCount[code] || 0) + 1;
+            const count = tagCount[code];
+            const deal = dealMap[code];
+            if (count % deal.qty === 0) {
+              subtotal += deal.price;
+            }
+          }
+        });
+      }
+
+      // 加上雞蛋糕剩餘無法成組的特價補原價
+      for (const code in tagCount) {
+        const remain = tagCount[code] % dealMap[code].qty;
+        if (remain > 0 && dealMap[code].methods.includes(pay)) {
+          const row = grid.find(r => r?.[0] === a && r?.[3]?.trim() === code);
+          const std = parseFloat(row?.[payCol]) || 0;
+          subtotal += remain * std;
         }
-      });
+      }
     }
 
-    // 🧾 顯示訂單小計
     let costText = order.querySelector(".costText");
     if (!costText) {
       costText = document.createElement("span");
@@ -325,6 +357,7 @@ function triggerSummaryUpdate(group) {
     total += subtotal;
     if (a !== "包裝") count += qty;
     countMap[a] = (countMap[a] || 0) + qty;
+
     if (!itemMap[key]) {
       itemMap[key] = { label, qty, total: a === "雞蛋糕" ? parts.length * qty : qty };
     } else {
@@ -343,16 +376,22 @@ function triggerSummaryUpdate(group) {
     .map(k => {
       const unit = unitMap[k] || 1;
       const totalQty = eggCount[k] || countMap[k];
-      return `${k}${Math.floor(totalQty / unit)}份`;
+      return totalQty < unit ? `${k}不足份` : `${k}${Math.floor(totalQty / unit)}份`;
     }).join("；") + `，共 ${count} 份`;
 
-  const line2 = [`共 ${total} 元`];
+  const totalBefore = total;
+  total += adjustVal;
+
+  const line2 = [`共 ${totalBefore} 元`];
+  if (!isNaN(adjustVal) && adjustVal !== 0) {
+    line2.push(`調整${adjustVal > 0 ? "+" : ""}${adjustVal}元後，共 ${total} 元`);
+  }
   if (delivery) line2.push(delivery);
   if (pickup) {
     const dt = new Date(pickup);
     if (!isNaN(dt)) {
       const y = dt.getFullYear(), m = dt.getMonth() + 1, d = dt.getDate();
-      const h = dt.getHours(), mi = String(dt.getMinutes()).padStart(2, "0");
+      const h = dt.getHours(), mi = String(dt.getMinutes()).pad.padStart(2, "0");
       line2.push(`${delivery ? "送達" : "取餐"}時間 ${y}/${m}/${d}/${h}:${mi}`);
     }
   }
@@ -360,7 +399,7 @@ function triggerSummaryUpdate(group) {
   const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
   summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
 }
-  function addCustomerCard() {
+      function addCustomerCard() {
   const container = document.getElementById("container");
   const card = document.createElement("div");
   card.className = "groupCard";
@@ -551,11 +590,13 @@ function triggerSummaryUpdate(group) {
 
   const b1 = document.createElement("select");
   b1.innerHTML = `<option value="">請選擇 B</option>`;
+  b1.style.flex = "1 1 45%";
   markInvalid(b1);
 
   const b2 = document.createElement("select");
   b2.innerHTML = `<option value="">請選擇 C</option>`;
   b2.style.display = "none";
+  b2.style.flex = "1 1 45%";
   markInvalid(b2);
 
   rowMid.append(b1, b2);
