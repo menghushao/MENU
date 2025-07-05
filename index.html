@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.31</title>
+  <title>📦 多客人訂單系統 V1.9.32</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -124,7 +124,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.31</h2>
+  <h2>📋 多客人訂單系統 V1.9.32</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -372,8 +372,8 @@ function readyToAddInitialCard() {
   del.textContent = "❌";
   del.onclick = () => {
     if (confirm("確定刪除此客人？")) {
-      card.remove();
       requestAnimationFrame(() => {
+        card.remove();
         updateCustomerNumbers();
         setTimeout(() => triggerSummaryUpdate(card), 0);
       });
@@ -490,18 +490,23 @@ function readyToAddInitialCard() {
   addOrderBtn.onclick = () => {
     addOrderBlock(orderBox);
     requestAnimationFrame(() => {
-      updateOrderNumbers(orderBox);
-      triggerSummaryUpdate(card);
+      setTimeout(() => {
+        updateOrderNumbers(orderBox);
+        triggerSummaryUpdate(card);
+      }, 0);
     });
   };
   card.appendChild(addOrderBtn);
 
   container.appendChild(card);
   addOrderBlock(orderBox);
+
   requestAnimationFrame(() => {
-    updateOrderNumbers(orderBox);
-    triggerSummaryUpdate(card);
-    updateCustomerNumbers();
+    setTimeout(() => {
+      updateOrderNumbers(orderBox);
+      triggerSummaryUpdate(card);
+      updateCustomerNumbers();
+    }, 0);
   });
 }function addOrderBlock(wrapper) {
   const card = document.createElement("div");
@@ -522,8 +527,8 @@ function readyToAddInitialCard() {
   del.className = "btn del";
   del.onclick = () => {
     if (confirm("刪除此訂單？")) {
-      card.remove();
       requestAnimationFrame(() => {
+        card.remove();
         updateOrderNumbers(wrapper);
         const group = card.closest(".groupCard");
         if (group) setTimeout(() => triggerSummaryUpdate(group), 0);
@@ -648,9 +653,12 @@ function readyToAddInitialCard() {
   [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
 
   wrapper.appendChild(card);
+
   requestAnimationFrame(() => {
-    updateOrderNumbers(wrapper);
-    update();
+    setTimeout(() => {
+      updateOrderNumbers(wrapper);
+      update();
+    }, 0);
   });
 }
 </script>
