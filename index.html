@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.31</title>
+  <title>📦 多客人訂單系統 V1.9.33</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -124,7 +124,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.31</h2>
+  <h2>📋 多客人訂單系統 V1.9.33</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -142,8 +142,8 @@
   </label>
 
   <label>滿
-    <input type="number" id="batchCost2" style="width: 50px" /> 元
-    <input type="number" id="batchPoint2" style="width: 50px" /> 點；
+    <input type="number" id="batchCost2" style="width: 50px;" /> 元
+    <input type="number" id="batchPoint2" style="width: 50px;" /> 點；
   </label>
 
   <label>滿
@@ -186,6 +186,14 @@ function updateCustomerNumbers() {
       const span = card.querySelector(".orderTitle span");
       if (span) span.textContent = `第 ${idx + 1} 組訂單`;
     });
+  });
+}
+
+// 🔁 新核心：以實體 DOM 為基準同步所有摘要
+function refreshAllSummaries() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll(".groupCard").forEach(group => triggerSummaryUpdate(group));
+    updateCustomerNumbers();
   });
 }
 
@@ -351,14 +359,6 @@ function readyToAddInitialCard() {
 
   const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
   summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
-
-  const wrapper = group.querySelector(".orderContainer");
-  if (wrapper) {
-    wrapper.querySelectorAll(".orderCard").forEach((card, idx) => {
-      const span = card.querySelector(".orderTitle span");
-      if (span) span.textContent = `第 ${idx + 1} 組訂單`;
-    });
-  }
 }function addCustomerCard() {
   const container = document.getElementById("container");
   const card = document.createElement("div");
@@ -373,10 +373,7 @@ function readyToAddInitialCard() {
   del.onclick = () => {
     if (confirm("確定刪除此客人？")) {
       card.remove();
-      requestAnimationFrame(() => {
-        updateCustomerNumbers();
-        setTimeout(() => triggerSummaryUpdate(card), 0);
-      });
+      refreshAllSummaries();
     }
   };
 
@@ -455,7 +452,7 @@ function readyToAddInitialCard() {
 
   const refresh = () => {
     markInvalidAll();
-    requestAnimationFrame(() => triggerSummaryUpdate(card));
+    refreshAllSummaries();
   };
 
   [state, source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk.querySelector("input")].forEach(el =>
@@ -489,20 +486,13 @@ function readyToAddInitialCard() {
   addOrderBtn.className = "btn add";
   addOrderBtn.onclick = () => {
     addOrderBlock(orderBox);
-    requestAnimationFrame(() => {
-      updateOrderNumbers(orderBox);
-      triggerSummaryUpdate(card);
-    });
+    refreshAllSummaries();
   };
   card.appendChild(addOrderBtn);
 
   container.appendChild(card);
   addOrderBlock(orderBox);
-  requestAnimationFrame(() => {
-    updateOrderNumbers(orderBox);
-    triggerSummaryUpdate(card);
-    updateCustomerNumbers();
-  });
+  refreshAllSummaries();
 }function addOrderBlock(wrapper) {
   const card = document.createElement("div");
   card.className = "orderCard";
@@ -523,11 +513,7 @@ function readyToAddInitialCard() {
   del.onclick = () => {
     if (confirm("刪除此訂單？")) {
       card.remove();
-      requestAnimationFrame(() => {
-        updateOrderNumbers(wrapper);
-        const group = card.closest(".groupCard");
-        if (group) setTimeout(() => triggerSummaryUpdate(group), 0);
-      });
+      refreshAllSummaries();
     }
   };
 
@@ -585,8 +571,7 @@ function readyToAddInitialCard() {
 
   const update = () => {
     markInvalidAll();
-    const group = card.closest(".groupCard");
-    if (group) requestAnimationFrame(() => triggerSummaryUpdate(group));
+    refreshAllSummaries();
   };
 
   a.addEventListener("change", () => {
@@ -648,10 +633,7 @@ function readyToAddInitialCard() {
   [a, b1, b2, qty].forEach(el => el.addEventListener("change", update));
 
   wrapper.appendChild(card);
-  requestAnimationFrame(() => {
-    updateOrderNumbers(wrapper);
-    update();
-  });
+  refreshAllSummaries();
 }
 </script>
 </body>
