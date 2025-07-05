@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.22</title>
+  <title>📦 多客人訂單系統 V1.9.23</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -123,7 +123,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.22</h2>
+  <h2>📋 多客人訂單系統 V1.9.23</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -224,16 +224,16 @@ function readyToAddInitialCard() {
     if (!Array.isArray(grid) || grid.length < 10) throw new Error("❌ 解密成功但資料格式異常");
 
     document.getElementById("loader").style.display = "none";
-    readyToAddInitialCard(); // 🚀 啟動新增客人功能
+    readyToAddInitialCard(); // ✅ 初始化第一組客人卡與按鈕綁定
   } catch (err) {
     console.error("❌ 資料載入錯誤", err);
     document.getElementById("loader").textContent = "❌ 載入失敗，請檢查金鑰與資料來源";
   }
 })();
   function triggerSummaryUpdate(group) {
-  const source = group.querySelector("select")?.value.trim();
+  const source = group.querySelectorAll("select")[0]?.value.trim(); // 顧客來源
   const orderNo = group.querySelector("input[placeholder='填入單號']")?.value.trim();
-  const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
+  const pay = group.querySelectorAll("select")[1]?.value.trim(); // 支付方式
   const pickup = group.querySelector("input[type='datetime-local']")?.value;
   const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
   const adjustVal = parseFloat(group.querySelector("input[placeholder='金額調整']")?.value || "0");
@@ -271,7 +271,7 @@ function readyToAddInitialCard() {
 
   orders.forEach(order => {
     const sel = order.querySelectorAll("select");
-    const a = sel[0]?.value.trim();
+    const a = sel[0]?.value.trim(); // 品類
     let b1 = sel[1]?.value.trim();
     let b2 = sel[2]?.style.display !== "none" ? sel[2]?.value.trim() : "";
     const qty = parseInt(order.querySelector("input[type='number']")?.value || "1");
@@ -288,7 +288,7 @@ function readyToAddInitialCard() {
     const label = parts.join("+") + extText;
     const key = `${a}|${parts.join("+")}|${extText}`;
 
-    const rows = parts.map(p => grid.find(r => r[0] === a && r[1] === p));
+    const rows = parts.map(p => grid.find(r => r?.[0] === a && r?.[1] === p));
     const payVals = rows.map(r => parseFloat(r?.[payCol]) || 0);
 
     let subtotal = 0;
@@ -348,25 +348,24 @@ function readyToAddInitialCard() {
     return (sortOrder[na] ?? 999) - (sortOrder[nb] ?? 999);
   });
 
-  const partList = Object.keys(countMap).sort((a, b) => (sortOrder[a] ?? 999) - (sortOrder[b] ?? 999))
-    .map(k => {
-      const unit = unitMap[k] || 1;
-      const totalQty = eggCount[k] || countMap[k];
-      const count = unit > 0 ? Math.floor(totalQty / unit) : 0;
-      const label = unit > 0
-        ? (totalQty % unit !== 0 ? `${k}不足份` : `${k}${count}份`)
-        : `${k}${totalQty}份`;
-      return { label, count, k, totalQty, unit };
-    });
+  const partList = Object.keys(countMap).sort((a, b) => (sortOrder[a] ?? 999) - (sortOrder[b] ?? 999)).map(k => {
+    const unit = unitMap[k] || 1;
+    const totalQty = eggCount[k] || countMap[k];
+    const count = unit > 0 ? Math.floor(totalQty / unit) : 0;
+    const label = unit > 0
+      ? (totalQty % unit !== 0 ? `${k}不足份` : `${k}${count}份`)
+      : `${k}${totalQty}份`;
+    return { label, count, k, totalQty, unit };
+  });
 
   const totalPortion = partList.reduce((sum, p) => p.unit > 0 ? sum + p.count : sum, 0);
   const prefix = `${source || ""}${source === "Ｕber Eats" && orderNo ? " " + orderNo : ""}${(source || orderNo) && pay ? " 以 " : ""}${pay ? pay + "結帳 " : ""}`;
   const line1 = prefix + partList.map(p => p.label).join("；") + `，共 ${totalPortion} 份`;
 
   const totalBefore = total;
-    const finalTotal = Math.round((totalBefore * payRatio + adjustVal) * 100) / 100;
+  const finalTotal = Math.round((totalBefore * payRatio + adjustVal) * 100) / 100;
 
-  const line2 = [`訂單金額共 ${totalBefore} 元`];
+    const line2 = [`訂單金額共 ${totalBefore} 元`];
   if (!isNaN(adjustVal) && (adjustVal !== 0 || payRatio !== 1)) {
     const adjText = `調整${adjustVal > 0 ? "+" : ""}${adjustVal}元後，應收金額共 ${finalTotal} 元`;
     line2.push(adjText);
@@ -543,7 +542,7 @@ function readyToAddInitialCard() {
       card.remove();
       updateOrderNumbers(wrapper);
       const group = card.closest(".groupCard");
-      if (group) triggerSummaryUpdate(group);
+      if (group) triggerSummaryUpdate(group); // ✅ 即時更新摘要
     }
   };
   title.append(label, cost, del);
@@ -571,8 +570,8 @@ function readyToAddInitialCard() {
   rowTop.append(a, qty);
   card.appendChild(rowTop);
 
-  const rowBC = document.createElement("div");
-  rowBC.className = "rowLine";
+  const rowMid = document.createElement("div");
+  rowMid.className = "rowLine";
 
   const b1 = document.createElement("select");
   b1.innerHTML = `<option value="">請選擇 B</option>`;
@@ -585,8 +584,8 @@ function readyToAddInitialCard() {
   b2.style.display = "none";
   markInvalid(b2);
 
-  rowBC.append(b1, b2);
-  card.appendChild(rowBC);
+  rowMid.append(b1, b2);
+  card.appendChild(rowMid);
 
   const extraRow = document.createElement("div");
   extraRow.className = "extraGrid";
