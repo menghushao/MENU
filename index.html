@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.20</title>
+  <title>📦 多客人訂單系統 V1.9.21</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -123,7 +123,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.20</h2>
+  <h2>📋 多客人訂單系統 V1.9.21</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -177,14 +177,13 @@ function markInvalidAll() {
   document.querySelectorAll("select, input[type='text'], input[type='number'], input[type='datetime-local']").forEach(markInvalid);
 }
 
-// 🔧 修正新增客人功能失效：延遲綁定按鈕行為
 function readyToAddInitialCard() {
   const btn = document.getElementById("addCustomerBtn");
   if (btn && typeof addCustomerCard === "function") {
     btn.onclick = () => addCustomerCard();
-    addCustomerCard(); // 首次自動新增第一組客人
+    addCustomerCard();
   } else {
-    setTimeout(readyToAddInitialCard, 100); // 函式尚未宣告完成，稍後再試
+    setTimeout(readyToAddInitialCard, 100);
   }
 }
 
@@ -225,7 +224,7 @@ function readyToAddInitialCard() {
     if (!Array.isArray(grid) || grid.length < 10) throw new Error("❌ 解密成功但資料格式異常");
 
     document.getElementById("loader").style.display = "none";
-    readyToAddInitialCard(); // 啟動新增客人功能
+    readyToAddInitialCard();
   } catch (err) {
     console.error("❌ 資料載入錯誤", err);
     document.getElementById("loader").textContent = "❌ 載入失敗，請檢查金鑰與資料來源";
@@ -233,6 +232,8 @@ function readyToAddInitialCard() {
 })();
   function triggerSummaryUpdate(group) {
   const pay = group.querySelector("select:nth-of-type(2)")?.value.trim();
+  const source = group.querySelector("select:nth-of-type(1)")?.value.trim();
+  const orderNo = group.querySelector("input[placeholder='填入單號']")?.value.trim();
   const pickup = group.querySelector("input[type='datetime-local']")?.value;
   const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
   const adjustVal = parseFloat(group.querySelector("input[placeholder='金額調整']")?.value || "0");
@@ -240,29 +241,18 @@ function readyToAddInitialCard() {
   const orders = [...group.querySelectorAll(".orderCard")];
   const payCol = grid[6].findIndex(v => v === pay);
 
-  const dealMap = {};
+  const dealMap = {}, unitMap = {}, sortOrder = {};
   for (let i = 1; i <= 8; i++) {
     const code = grid[i]?.[0]?.trim();
-    if (!code) continue;
-    dealMap[code] = {
+    const name = grid[i]?.[4]?.trim();
+    const unit = parseFloat(grid[i]?.[5]);
+    if (code) dealMap[code] = {
       qty: parseInt(grid[i]?.[1]),
       price: parseInt(grid[i]?.[2]),
       methods: (grid[i]?.[3] || "").split("、").map(s => s.trim()),
       row: i
     };
-  }
-
-  const validCodes = Object.keys(dealMap);
-  const unitMap = {};
-  for (let i = 1; i <= 8; i++) {
-    const name = grid[i]?.[4]?.trim();
-    const unit = parseFloat(grid[i]?.[5]);
-    if (name && unit > 0) unitMap[name] = unit;
-  }
-
-  const sortOrder = {};
-  for (let i = 1; i <= 8; i++) {
-    const name = grid[i]?.[4]?.trim();
+    if (name && unit >= 0) unitMap[name] = unit;
     if (name && !(name in sortOrder)) sortOrder[name] = i;
   }
 
@@ -295,22 +285,22 @@ function readyToAddInitialCard() {
     if (a !== "雞蛋糕") {
       const row = rows[0];
       const code = row?.[3]?.trim();
-      if (code && validCodes.includes(code) && dealMap[code].methods.includes(pay)) {
+      if (code && dealMap[code]?.methods.includes(pay)) {
         tagCount[code] = (tagCount[code] || 0) + qty;
-        const fullGroup = Math.floor(tagCount[code] / dealMap[code].qty);
-        const remain = tagCount[code] % dealMap[code].qty;
-        subtotal += fullGroup * dealMap[code].price + remain * payVals[0];
+        const deal = dealMap[code];
+        const g = Math.floor(tagCount[code] / deal.qty);
+        const r = tagCount[code] % deal.qty;
+        subtotal += g * deal.price + r * payVals[0];
       } else {
         subtotal += payVals.reduce((a, b) => a + b, 0) * qty;
       }
     } else {
       for (let q = 0; q < qty; q++) {
-        parts.forEach((p, i) => {
-          const row = grid.find(r => r?.[0] === a && r?.[1] === p);
-          const code = row?.[3]?.trim() || "";
+        parts.forEach(p => {
+          const row = grid.find(r => r[0] === a && r[1] === p);
+          const code = row?.[3]?.trim();
           const price = parseFloat(row?.[payCol]) || 0;
-
-          if (!code || !validCodes.includes(code) || !dealMap[code].methods.includes(pay)) {
+          if (!code || !dealMap[code]?.methods.includes(pay)) {
             subtotal += price;
           } else {
             tagCount[code] = (tagCount[code] || 0) + 1;
@@ -324,21 +314,14 @@ function readyToAddInitialCard() {
       for (const code in tagCount) {
         const remain = tagCount[code] % dealMap[code].qty;
         if (remain > 0 && dealMap[code].methods.includes(pay)) {
-          const row = grid.find(r => r?.[3]?.trim() === code);
+          const row = grid.find(r => r[3]?.trim() === code);
           const std = parseFloat(row?.[payCol]) || 0;
           subtotal += remain * std;
         }
       }
     }
 
-    let costText = order.querySelector(".costText");
-    if (!costText) {
-      costText = document.createElement("span");
-      costText.className = "costText";
-      order.querySelector(".orderTitle span")?.after(costText);
-    }
-    costText.textContent = `小計 ${subtotal} 元`;
-
+    order.querySelector(".costText").textContent = `小計 ${subtotal} 元`;
     total += subtotal;
     countMap[a] = (countMap[a] || 0) + qty;
     itemMap[key] = itemMap[key] || { label, qty: 0, total: 0 };
@@ -352,21 +335,19 @@ function readyToAddInitialCard() {
     return (sortOrder[na] ?? 999) - (sortOrder[nb] ?? 999);
   });
 
-  const line1 = Object.keys(countMap).sort((a, b) => (sortOrder[a] ?? 999) - (sortOrder[b] ?? 999))
-    .map(k => {
-      const unit = unitMap[k] || 1;
-      const totalQty = eggCount[k] || countMap[k];
-      return totalQty % unit !== 0 ? `${k}不足份` : `${k}${Math.floor(totalQty / unit)}份`;
-    }).join("；");
+  const parts = Object.keys(countMap).sort((a, b) => (sortOrder[a] ?? 999) - (sortOrder[b] ?? 999)).map(k => {
+    const unit = unitMap[k];
+    const totalQty = eggCount[k] || countMap[k];
+    const label = unit > 0 ? (totalQty % unit !== 0 ? `${k}不足份` : `${k}${Math.floor(totalQty / unit)}份`) : `${k}${totalQty}份`;
+    return { label, k, count: unit > 0 && totalQty % unit === 0 ? Math.floor(totalQty / unit) : 0 };
+  });
+
+  const totalPortion = parts.reduce((sum, p) => unitMap[p.k] > 0 ? sum + p.count : sum, 0);
+  const line1prefix = `${source || ""}${orderNo ? " " + orderNo : ""}${(source || orderNo) && pay ? " 以 " : ""}${pay ? pay + "結帳 " : ""}`;
+  const line1 = line1prefix + parts.map(p => p.label).join("；") + `，共 ${totalPortion} 份`;
 
   const totalBefore = total;
   total += adjustVal;
-
-  const totalPortion = Object.keys(countMap).reduce((sum, k) => {
-    const unit = unitMap[k] || 1;
-    const totalQty = eggCount[k] || countMap[k];
-    return totalQty % unit === 0 ? sum + Math.floor(totalQty / unit) : sum;
-  }, 0);
 
   const line2 = [`共 ${totalBefore} 元`];
   if (!isNaN(adjustVal) && adjustVal !== 0) {
@@ -383,7 +364,7 @@ function readyToAddInitialCard() {
   }
 
   const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
-  summary.textContent = `${line1}，共 ${totalPortion} 份\n${line2.join("； ")}\n${line3}`;
+  summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
 }
   function addCustomerCard() {
   const container = document.getElementById("container");
