@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.29</title>
+  <title>📦 多客人訂單系統 V1.9.30</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -66,7 +66,7 @@
 
     .orderCard {
       flex: 0 0 auto;
-      width: 250px; /* ✅ 依你規格固定寬度 */
+      width: 250px;
       border: 1px solid #999;
       padding: 10px;
       background: #fcfcfc;
@@ -124,7 +124,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.29</h2>
+  <h2>📋 多客人訂單系統 V1.9.30</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -175,6 +175,18 @@ function markInvalid(el) {
 
 function markInvalidAll() {
   document.querySelectorAll("select, input[type='text'], input[type='number'], input[type='datetime-local']").forEach(markInvalid);
+}
+
+function updateCustomerNumbers() {
+  document.querySelectorAll(".groupCard").forEach((g, i) => {
+    const h3 = g.querySelector("h3");
+    if (h3) h3.textContent = `第 ${i + 1} 組客人`;
+    const orders = g.querySelectorAll(".orderCard");
+    orders.forEach((card, idx) => {
+      const span = card.querySelector(".orderTitle span");
+      if (span) span.textContent = `第 ${idx + 1} 組訂單`;
+    });
+  });
 }
 
 function readyToAddInitialCard() {
@@ -232,8 +244,8 @@ function readyToAddInitialCard() {
 })();function triggerSummaryUpdate(group) {
   const row = group.querySelector(".rowLine");
   const selects = row.querySelectorAll("select");
-  const source = selects[0]?.value.trim(); // 顧客來源
-  const pay = selects[1]?.value.trim();    // 支付方式
+  const source = selects[0]?.value.trim();
+  const pay = selects[1]?.value.trim();
   const orderNo = row.querySelector("input[placeholder='填入單號']")?.value.trim();
   const pickup = row.querySelector("input[type='datetime-local']")?.value;
   const delivery = row.querySelector("input[placeholder='外送資訊']")?.value.trim();
@@ -321,11 +333,11 @@ function readyToAddInitialCard() {
 
   const totalBefore = total;
   const totalAfterRatio = totalBefore * payRatio;
-  const finalTotal = Math.round((totalAfterRatio + adjustVal) * 1) / 1;
+  const finalTotal = Math.round((totalAfterRatio + adjustVal) * 100) / 100;
 
   const line2 = [`訂單金額共 ${totalBefore} 元`];
   line2.push(`金額調整${adjustVal > 0 ? "+" : ""}${adjustVal}元`);
-  line2.push(`應收款項 ${finalTotal} 元`);
+  line2.push(`應收款項 ${finalTotal.toFixed(2)} 元`);
 
   if (delivery) line2.push(delivery);
   if (pickup) {
@@ -361,7 +373,10 @@ function readyToAddInitialCard() {
   del.onclick = () => {
     if (confirm("確定刪除此客人？")) {
       card.remove();
-      requestAnimationFrame(() => triggerSummaryUpdate(card));
+      requestAnimationFrame(() => {
+        updateCustomerNumbers();
+        triggerSummaryUpdate(card);
+      });
     }
   };
 
@@ -440,7 +455,9 @@ function readyToAddInitialCard() {
 
   const refresh = () => {
     markInvalidAll();
-    requestAnimationFrame(() => triggerSummaryUpdate(card));
+    requestAnimationFrame(() => {
+      triggerSummaryUpdate(card);
+    });
   };
 
   [state, source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk.querySelector("input")].forEach(el =>
@@ -486,6 +503,7 @@ function readyToAddInitialCard() {
   requestAnimationFrame(() => {
     updateOrderNumbers(orderBox);
     triggerSummaryUpdate(card);
+    updateCustomerNumbers(); // 確保第 X 組客人正確呈現
   });
 }function addOrderBlock(wrapper) {
   const card = document.createElement("div");
