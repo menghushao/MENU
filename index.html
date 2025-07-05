@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.28</title>
+  <title>📦 多客人訂單系統 V1.9.29</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -66,7 +66,7 @@
 
     .orderCard {
       flex: 0 0 auto;
-      width: 250px; /* ✅ 第❸項修正：卡片寬度統一 */
+      width: 250px; /* ✅ 依你規格固定寬度 */
       border: 1px solid #999;
       padding: 10px;
       background: #fcfcfc;
@@ -124,7 +124,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.28</h2>
+  <h2>📋 多客人訂單系統 V1.9.29</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -224,19 +224,20 @@ function readyToAddInitialCard() {
     if (!Array.isArray(grid) || grid.length < 10) throw new Error("❌ 解密成功但資料格式異常");
 
     document.getElementById("loader").style.display = "none";
-    readyToAddInitialCard(); // ✅ 正確綁定第一組
+    readyToAddInitialCard();
   } catch (err) {
     console.error("❌ 資料載入錯誤", err);
     document.getElementById("loader").textContent = "❌ 載入失敗，請檢查金鑰與資料來源";
   }
 })();function triggerSummaryUpdate(group) {
-  const selects = group.querySelectorAll("select");
-  const source = selects[0]?.value.trim();
-  const pay = selects[1]?.value.trim();
-  const orderNo = group.querySelector("input[placeholder='填入單號']")?.value.trim();
-  const pickup = group.querySelector("input[type='datetime-local']")?.value;
-  const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
-  const adjustVal = parseFloat(group.querySelector("input[placeholder='金額調整']")?.value || "0");
+  const row = group.querySelector(".rowLine");
+  const selects = row.querySelectorAll("select");
+  const source = selects[0]?.value.trim(); // 顧客來源
+  const pay = selects[1]?.value.trim();    // 支付方式
+  const orderNo = row.querySelector("input[placeholder='填入單號']")?.value.trim();
+  const pickup = row.querySelector("input[type='datetime-local']")?.value;
+  const delivery = row.querySelector("input[placeholder='外送資訊']")?.value.trim();
+  const adjustVal = parseFloat(row.querySelector("input[placeholder='金額調整']")?.value || "0");
   const summary = group.querySelector(".summaryText");
   const orders = [...group.querySelectorAll(".orderCard")];
 
@@ -339,7 +340,6 @@ function readyToAddInitialCard() {
   const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
   summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
 
-  // ✅ 即時更新「第 X 組訂單」組數
   const wrapper = group.querySelector(".orderContainer");
   if (wrapper) {
     wrapper.querySelectorAll(".orderCard").forEach((card, idx) => {
@@ -361,14 +361,12 @@ function readyToAddInitialCard() {
   del.onclick = () => {
     if (confirm("確定刪除此客人？")) {
       card.remove();
-      updateCustomerNumbers();
-      triggerSummaryUpdate(card);
+      requestAnimationFrame(() => triggerSummaryUpdate(card));
     }
   };
 
   const title = document.createElement("h3");
-  const index = document.querySelectorAll(".groupCard").length + 1;
-  title.textContent = `第 ${index} 組客人`;
+  title.textContent = `第 ${document.querySelectorAll(".groupCard").length + 1} 組客人`;
 
   const state = document.createElement("select");
   state.innerHTML = `
@@ -442,7 +440,7 @@ function readyToAddInitialCard() {
 
   const refresh = () => {
     markInvalidAll();
-    triggerSummaryUpdate(card);
+    requestAnimationFrame(() => triggerSummaryUpdate(card));
   };
 
   [state, source, orderNo, payment, pickupTime, delivery, points, adjust, boxChk.querySelector("input")].forEach(el =>
@@ -476,16 +474,19 @@ function readyToAddInitialCard() {
   addOrderBtn.className = "btn add";
   addOrderBtn.onclick = () => {
     addOrderBlock(orderBox);
-    updateOrderNumbers(orderBox);
-    triggerSummaryUpdate(card);
+    requestAnimationFrame(() => {
+      updateOrderNumbers(orderBox);
+      triggerSummaryUpdate(card);
+    });
   };
   card.appendChild(addOrderBtn);
 
   container.appendChild(card);
   addOrderBlock(orderBox);
-  updateOrderNumbers(orderBox);
-  updateCustomerNumbers();
-  triggerSummaryUpdate(card);
+  requestAnimationFrame(() => {
+    updateOrderNumbers(orderBox);
+    triggerSummaryUpdate(card);
+  });
 }function addOrderBlock(wrapper) {
   const card = document.createElement("div");
   card.className = "orderCard";
@@ -506,9 +507,11 @@ function readyToAddInitialCard() {
   del.onclick = () => {
     if (confirm("刪除此訂單？")) {
       card.remove();
-      updateOrderNumbers(wrapper);
-      const group = card.closest(".groupCard");
-      if (group) triggerSummaryUpdate(group);
+      requestAnimationFrame(() => {
+        updateOrderNumbers(wrapper);
+        const group = card.closest(".groupCard");
+        if (group) triggerSummaryUpdate(group);
+      });
     }
   };
 
@@ -567,7 +570,7 @@ function readyToAddInitialCard() {
   const update = () => {
     markInvalidAll();
     const group = card.closest(".groupCard");
-    if (group) triggerSummaryUpdate(group);
+    if (group) requestAnimationFrame(() => triggerSummaryUpdate(group));
   };
 
   a.addEventListener("change", () => {
@@ -620,8 +623,7 @@ function readyToAddInitialCard() {
       sel.style.width = "60px";
       sel.addEventListener("change", update);
       markInvalid(sel);
-      if (i <= 3) extraRow1.appendChild(sel);
-      else extraRow2.appendChild(sel);
+      (i <= 3 ? extraRow1 : extraRow2).appendChild(sel);
     }
 
     update();
