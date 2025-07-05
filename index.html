@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.27</title>
+  <title>📦 多客人訂單系統 V1.9.28</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -66,7 +66,7 @@
 
     .orderCard {
       flex: 0 0 auto;
-      width: 256PX; /* ✅ 第⑥項修正：改回原始比例 */
+      width: 250px; /* ✅ 第❸項修正：卡片寬度統一 */
       border: 1px solid #999;
       padding: 10px;
       background: #fcfcfc;
@@ -124,7 +124,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.27</h2>
+  <h2>📋 多客人訂單系統 V1.9.28</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -177,12 +177,11 @@ function markInvalidAll() {
   document.querySelectorAll("select, input[type='text'], input[type='number'], input[type='datetime-local']").forEach(markInvalid);
 }
 
-// ✅ 初始綁定「新增客人」邏輯，確保 UI 元素與函式正確啟動
 function readyToAddInitialCard() {
   const btn = document.getElementById("addCustomerBtn");
   if (btn && typeof addCustomerCard === "function") {
     btn.onclick = () => addCustomerCard();
-    addCustomerCard(); // ➕ 新增第一組客人
+    addCustomerCard();
   } else {
     setTimeout(readyToAddInitialCard, 100);
   }
@@ -225,15 +224,15 @@ function readyToAddInitialCard() {
     if (!Array.isArray(grid) || grid.length < 10) throw new Error("❌ 解密成功但資料格式異常");
 
     document.getElementById("loader").style.display = "none";
-    readyToAddInitialCard(); // ✅ 綁定初始化組件
+    readyToAddInitialCard(); // ✅ 正確綁定第一組
   } catch (err) {
     console.error("❌ 資料載入錯誤", err);
     document.getElementById("loader").textContent = "❌ 載入失敗，請檢查金鑰與資料來源";
   }
 })();function triggerSummaryUpdate(group) {
   const selects = group.querySelectorAll("select");
-  const source = selects[0]?.value.trim(); // 顧客來源
-  const pay = selects[1]?.value.trim();    // 支付方式
+  const source = selects[0]?.value.trim();
+  const pay = selects[1]?.value.trim();
   const orderNo = group.querySelector("input[placeholder='填入單號']")?.value.trim();
   const pickup = group.querySelector("input[type='datetime-local']")?.value;
   const delivery = group.querySelector("input[placeholder='外送資訊']")?.value.trim();
@@ -241,7 +240,6 @@ function readyToAddInitialCard() {
   const summary = group.querySelector(".summaryText");
   const orders = [...group.querySelectorAll(".orderCard")];
 
-  // ✅ 支付方式抓欄名位置
   const payHeaders = grid[6]?.slice(15, 32) || [];
   const payIndex = payHeaders.findIndex(v => v === pay);
   const payCol = payIndex >= 0 ? 15 + payIndex : -1;
@@ -341,7 +339,7 @@ function readyToAddInitialCard() {
   const line3 = items.map(i => `${i[1].label}X${i[1].qty}`).join("；");
   summary.textContent = `${line1}\n${line2.join("； ")}\n${line3}`;
 
-  // ✅ 組數排序改為依 DOM 編號（第④項）
+  // ✅ 即時更新「第 X 組訂單」組數
   const wrapper = group.querySelector(".orderContainer");
   if (wrapper) {
     wrapper.querySelectorAll(".orderCard").forEach((card, idx) => {
@@ -496,7 +494,7 @@ function readyToAddInitialCard() {
   title.className = "orderTitle";
 
   const label = document.createElement("span");
-  label.textContent = ""; // ✅ 由 triggerSummaryUpdate 更新實際順序
+  label.textContent = "";
 
   const cost = document.createElement("span");
   cost.className = "costText";
@@ -510,7 +508,7 @@ function readyToAddInitialCard() {
       card.remove();
       updateOrderNumbers(wrapper);
       const group = card.closest(".groupCard");
-      if (group) triggerSummaryUpdate(group); // ✅ 第④項即時更新摘要
+      if (group) triggerSummaryUpdate(group);
     }
   };
 
@@ -527,13 +525,14 @@ function readyToAddInitialCard() {
     o.value = o.textContent = v;
     a.appendChild(o);
   });
+  a.style.width = "100px";
   markInvalid(a);
 
   const qty = document.createElement("input");
   qty.type = "number";
   qty.min = "1";
   qty.value = "1";
-  qty.style.width = "60px";
+  qty.style.width = "100px";
   markInvalid(qty);
 
   rowTop.append(a, qty);
@@ -544,19 +543,26 @@ function readyToAddInitialCard() {
 
   const b1 = document.createElement("select");
   b1.innerHTML = `<option value="">請選擇 B</option>`;
+  b1.style.width = "100px";
   markInvalid(b1);
 
   const b2 = document.createElement("select");
   b2.innerHTML = `<option value="">請選擇 C</option>`;
   b2.style.display = "none";
+  b2.style.width = "100px";
   markInvalid(b2);
 
   rowMid.append(b1, b2);
   card.appendChild(rowMid);
 
-  const extraRow = document.createElement("div");
-  extraRow.className = "extraGrid";
-  card.appendChild(extraRow);
+  const extraRow1 = document.createElement("div");
+  extraRow1.className = "extraGrid";
+
+  const extraRow2 = document.createElement("div");
+  extraRow2.className = "extraGrid";
+
+  card.appendChild(extraRow1);
+  card.appendChild(extraRow2);
 
   const update = () => {
     markInvalidAll();
@@ -588,7 +594,8 @@ function readyToAddInitialCard() {
       b2.style.display = "none";
     }
 
-    extraRow.innerHTML = "";
+    extraRow1.innerHTML = "";
+    extraRow2.innerHTML = "";
     update();
   });
 
@@ -599,7 +606,8 @@ function readyToAddInitialCard() {
     if (!row) return;
 
     const opts = row.slice(5, 15).map(v => v?.trim()).filter(Boolean);
-    extraRow.innerHTML = "";
+    extraRow1.innerHTML = "";
+    extraRow2.innerHTML = "";
 
     for (let i = 1; i <= 6; i++) {
       const sel = document.createElement("select");
@@ -609,9 +617,11 @@ function readyToAddInitialCard() {
         o.textContent = o.value = v;
         sel.appendChild(o);
       });
+      sel.style.width = "60px";
       sel.addEventListener("change", update);
       markInvalid(sel);
-      extraRow.appendChild(sel);
+      if (i <= 3) extraRow1.appendChild(sel);
+      else extraRow2.appendChild(sel);
     }
 
     update();
