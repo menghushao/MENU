@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>📦 多客人訂單系統 V1.9.33</title>
+  <title>📦 多客人訂單系統 V1.9.40</title>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -124,7 +124,7 @@
 <body>
 
 <div class="stickyBar">
-  <h2>📋 多客人訂單系統 V1.9.33</h2>
+  <h2>📋 多客人訂單系統 V1.9.40</h2>
   <button id="addCustomerBtn" class="btn add">➕ 新增客人</button>
 
   <label>烤盤計時：
@@ -133,12 +133,12 @@
   </label>
 
   <label>顆秒：
-    <input type="number" id="perItemTime" style="width: 60px" />；
+    <input type="number" id="perItemTime" style="width: 60px;" />；
   </label>
 
   <label>滿
-    <input type="number" id="batchCount1" style="width: 50px" /> 份折
-    <input type="number" id="batchDiscount1" style="width: 50px" /> 份；
+    <input type="number" id="batchCount1" style="width: 50px;" /> 份折
+    <input type="number" id="batchDiscount1" style="width: 50px;" /> 份；
   </label>
 
   <label>滿
@@ -147,12 +147,12 @@
   </label>
 
   <label>滿
-    <input type="number" id="batchCount3" style="width: 50px" /> 份乘
-    <input type="number" id="batchRate3" style="width: 50px" /> 倍；
+    <input type="number" id="batchCount3" style="width: 50px;" /> 份乘
+    <input type="number" id="batchRate3" style="width: 50px;" /> 倍；
   </label>
 
   <label>點卡折抵上限：
-    <input type="number" id="pointLimit" style="width: 60px" /> 元
+    <input type="number" id="pointLimit" style="width: 60px;" /> 元
   </label>
 </div>
 
@@ -189,7 +189,6 @@ function updateCustomerNumbers() {
   });
 }
 
-// 🔁 新核心：以實體 DOM 為基準同步所有摘要
 function refreshAllSummaries() {
   requestAnimationFrame(() => {
     document.querySelectorAll(".groupCard").forEach(group => triggerSummaryUpdate(group));
@@ -281,7 +280,21 @@ function readyToAddInitialCard() {
     unitMap[k] = unitKeys[i];
   });
 
-  const itemMap = {}, countMap = {}, eggCount = {};
+  const dealRows = grid.slice(1, 9);
+  const dealMap = {};
+  dealRows.forEach(r => {
+    const code = r?.[0]?.trim();
+    if (!code) return;
+    dealMap[code] = {
+      threshold: parseInt(r[1]) || 0,
+      price: parseFloat(r[2]) || 0,
+      methods: r[3]?.split(/[\s,，、]+/).map(v => v.trim()).filter(Boolean) || [],
+    };
+  });
+
+  const itemUnits = [];
+  const groupTotals = {};
+  const partMap = {}, itemMap = {};
   let total = 0;
 
   orders.forEach(order => {
@@ -304,19 +317,40 @@ function readyToAddInitialCard() {
     const label = parts.join("+") + extText;
     const key = `${a}|${parts.join("+")}|${extText}`;
 
-    const rows = fullParts.map(p => grid.find(r => r[0] === a && r[1] === p));
-    const payVals = payCol >= 0 ? rows.map(r => parseFloat(r?.[payCol]) || 0) : [0];
-    let subtotal = payVals.reduce((a, b) => a + b, 0) * qty;
+    fullParts.forEach(p => {
+      const row = grid.find(r => r[0] === a && r[1] === p);
+      const groupCode = row?.[3]?.trim() || "";
+      const price = payCol >= 0 ? parseFloat(row?.[payCol]) || 0 : 0;
 
-    const costText = order.querySelector(".costText");
-    if (costText) costText.textContent = `小計 ${subtotal} 元`;
+      for (let i = 0; i < qty; i++) {
+        itemUnits.push({ name: a, part: p, groupCode, price, label });
+        if (groupCode) groupTotals[groupCode] = (groupTotals[groupCode] || 0) + 1;
+      }
 
-    total += subtotal;
-    countMap[a] = (countMap[a] || 0) + qty;
-    itemMap[key] = itemMap[key] || { label, qty: 0, total: 0 };
+      partMap[a] = (partMap[a] || 0) + qty;
+    });
+
+    itemMap[key] = itemMap[key] || { label, qty: 0 };
     itemMap[key].qty += qty;
-    itemMap[key].total += a === "雞蛋糕" ? parts.length * qty : qty;
-    eggCount[a] = (eggCount[a] || 0) + parts.length * qty;
+  });
+
+  const groupDiscountPool = {};
+  Object.entries(groupTotals).forEach(([code, totalQty]) => {
+    const deal = dealMap[code];
+    if (!deal || !deal.methods.includes(pay)) return;
+    const groupCount = Math.floor(totalQty / deal.threshold);
+    groupDiscountPool[code] = groupCount * deal.threshold;
+  });
+
+  itemUnits.forEach(unit => {
+    const code = unit.groupCode;
+    const deal = dealMap[code];
+    if (code && deal && deal.methods.includes(pay) && groupDiscountPool[code] > 0) {
+      total += deal.price / deal.threshold;
+      groupDiscountPool[code] -= 1;
+    } else {
+      total += unit.price;
+    }
   });
 
   const items = Object.entries(itemMap).sort((a, b) => {
@@ -324,10 +358,10 @@ function readyToAddInitialCard() {
     return (sortOrder[na] ?? 999) - (sortOrder[nb] ?? 999);
   });
 
-  const partList = Object.keys(countMap).sort((a, b) => (sortOrder[a] ?? 999) - (sortOrder[b] ?? 999))
+  const partList = Object.keys(partMap).sort((a, b) => (sortOrder[a] ?? 999) - (sortOrder[b] ?? 999))
     .map(k => {
       const unit = unitMap[k] || 0;
-      const totalQty = eggCount[k] || countMap[k];
+      const totalQty = partMap[k];
       const count = unit > 0 ? Math.floor(totalQty / unit) : 0;
       const label = unit > 0
         ? (totalQty % unit === 0 ? `${k}${count}份` : `${k}不足份`)
